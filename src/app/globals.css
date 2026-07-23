@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+/* Tema claro pensado para proyectarse en clase (alto contraste). */
+:root {
+  color-scheme: light;
+  --background: #f1f5f9; /* slate-100 */
+  --foreground: #0f172a; /* slate-900 */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans), system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), monospace;
+}
+
+body {
+  background:
+    radial-gradient(1200px 600px at 100% -10%, #e0e7ff 0%, transparent 55%),
+    radial-gradient(1000px 500px at -10% 110%, #ccfbf1 0%, transparent 50%),
+    var(--background);
+  color: var(--foreground);
+  min-height: 100vh;
+}
+
+/* Números tabulares para tablas y contadores. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Oculta las flechas de los inputs numéricos. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}

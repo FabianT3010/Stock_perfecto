@@ -1,0 +1,28 @@
+# Ejecuta la app Next.js en un contenedor.
+# Lee las variables desde un archivo .env en esta carpeta (ver .env.docker.example).
+#
+#   cp .env.docker.example .env   &&   docker compose up --build
+#
+# La base de datos Supabase es aparte:
+#   - Nube: apunta las URLs/keys a tu proyecto (SUPABASE_URL puede quedar vacío).
+#   - Local (npx supabase start): usa SUPABASE_URL=http://host.docker.internal:54321
+#     para que el contenedor alcance Supabase en tu máquina.
+
+services:
+  app:
+    build:
+      context: .
+      args:
+        # Públicas: se hornean en el bundle del navegador durante el build.
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      # Secreta: solo servidor, en tiempo de ejecución.
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      # URL que usa el SERVIDOR (contenedor). Vacío => usa NEXT_PUBLIC_SUPABASE_URL.
+      SUPABASE_URL: ${SUPABASE_URL:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
