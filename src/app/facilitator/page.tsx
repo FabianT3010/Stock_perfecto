@@ -95,7 +95,7 @@ export default function FacilitatorCreatePage() {
             <div className="grid grid-cols-2 gap-4 text-center">
               <div>
                 <div className="text-xs uppercase text-slate-400">Código de sala</div>
-                <div className="mt-1 font-mono text-4xl font-black tracking-widest text-indigo-600">
+                <div className="mt-1 font-mono text-4xl font-black tracking-widest text-brand-700">
                   {created.code}
                 </div>
               </div>
@@ -146,7 +146,7 @@ export default function FacilitatorCreatePage() {
                 <select
                   value={product}
                   onChange={(e) => setProduct(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
                 >
                   {PRODUCT_OPTIONS.map((p) => (
                     <option key={p} value={p}>

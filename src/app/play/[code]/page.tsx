@@ -68,7 +68,7 @@ function Play({ code }: { code: string }) {
     return (
       <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4">
         <Callout tone="error">{data.error ?? "Sala no encontrada."}</Callout>
-        <Link href="/join" className="mt-4 text-center text-sm text-indigo-600">
+        <Link href="/join" className="mt-4 text-center text-sm text-brand-700">
           ← Volver a unirme
         </Link>
       </main>

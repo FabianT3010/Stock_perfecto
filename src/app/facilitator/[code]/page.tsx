@@ -213,7 +213,7 @@ function Control({ creds }: { creds: FacilitatorCreds }) {
         <div className="flex items-center gap-3">
           <div className="text-right">
             <div className="text-xs uppercase text-slate-400">Código</div>
-            <div className="font-mono text-2xl font-black tracking-widest text-indigo-600">
+            <div className="font-mono text-2xl font-black tracking-widest text-brand-700">
               {code}
             </div>
           </div>
@@ -239,7 +239,7 @@ function Control({ creds }: { creds: FacilitatorCreds }) {
                 className={cx(
                   "rounded-xl border px-3 py-2 text-sm font-semibold transition",
                   r.round_number === selected
-                    ? "border-indigo-400 bg-indigo-50 text-indigo-700"
+                    ? "border-brand-400 bg-brand-50 text-brand-700"
                     : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
                 )}
               >
@@ -296,7 +296,7 @@ function Control({ creds }: { creds: FacilitatorCreds }) {
                       key={p.id}
                       className={cx(
                         "flex items-center justify-between rounded-lg border px-3 py-1.5 text-sm",
-                        done ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white",
+                        done ? "border-brand-200 bg-brand-50" : "border-slate-200 bg-white",
                       )}
                     >
                       <span className="truncate text-slate-700">{p.name}</span>
@@ -334,7 +334,7 @@ function Control({ creds }: { creds: FacilitatorCreds }) {
                     <td className="py-1.5 text-slate-500">Ronda {r.round_number}</td>
                     <td className="py-1.5 text-right font-semibold text-slate-800">
                       {r.status === "revealed" ? (
-                        <span className="text-indigo-600">{r.real_demand} ✓</span>
+                        <span className="text-brand-700">{r.real_demand} ✓</span>
                       ) : (
                         <span>{r.planned_demand ?? "—"}</span>
                       )}
@@ -405,7 +405,7 @@ function RoundControl({
             value={demand}
             disabled={!editable}
             onChange={(e) => setDemand(e.target.value)}
-            className="border-indigo-200 bg-indigo-50/50"
+            className="border-brand-200 bg-brand-50/50"
           />
         </Field>
       </div>
@@ -463,7 +463,7 @@ function RoundControl({
             </Button>
           )}
           {round.status === "revealed" && (
-            <span className="inline-flex items-center gap-2 text-sm font-semibold text-indigo-600">
+            <span className="inline-flex items-center gap-2 text-sm font-semibold text-brand-700">
               Demanda real: {round.real_demand} · resultados publicados
             </span>
           )}
@@ -483,11 +483,11 @@ function parseList(text: string): number[] {
 function StatusDot({ status }: { status: RoundRow["status"] }) {
   const color =
     status === "open"
-      ? "bg-emerald-500"
+      ? "bg-brand-500"
       : status === "closed"
-        ? "bg-amber-500"
+        ? "bg-accent-500"
         : status === "revealed"
-          ? "bg-indigo-500"
+          ? "bg-gold-600"
           : "bg-slate-300";
   return <span className={cx("inline-block h-2 w-2 rounded-full", color)} />;
 }

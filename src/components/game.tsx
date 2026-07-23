@@ -78,9 +78,9 @@ export function RoundResultCard({
   const interp = interpretOutcome(outcome);
   const interpTone =
     interp.tone === "success"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+      ? "border-brand-200 bg-brand-50 text-brand-800"
       : interp.tone === "warn"
-        ? "border-amber-200 bg-amber-50 text-amber-800"
+        ? "border-accent-200 bg-accent-50 text-accent-700"
         : "border-sky-200 bg-sky-50 text-sky-800";
   return (
     <Card title={title ?? "Resultado de la ronda"}>
@@ -152,13 +152,13 @@ export function ParticipantHistory({
               <td className="px-2">{int(r.quantity)}</td>
               <td className="px-2">{int(r.real_demand)}</td>
               <td className="px-2">{int(r.units_sold)}</td>
-              <td className="px-2 text-amber-600">{int(r.leftover)}</td>
-              <td className="px-2 text-rose-600">{int(r.lost_sales)}</td>
+              <td className="px-2 text-accent-600">{int(r.leftover)}</td>
+              <td className="px-2 text-danger-600">{int(r.lost_sales)}</td>
               <td className="px-2">{percent(r.service_level)}</td>
               <td
                 className={cx(
                   "px-2 text-right font-semibold",
-                  r.profit >= 0 ? "text-emerald-600" : "text-rose-600",
+                  r.profit >= 0 ? "text-brand-600" : "text-danger-600",
                 )}
               >
                 {signedMoney(r.profit, currency)}
@@ -201,7 +201,7 @@ export function Ranking({
             className={cx(
               "flex items-center gap-3 rounded-xl border px-3 py-2",
               isMe
-                ? "border-indigo-300 bg-indigo-50"
+                ? "border-brand-300 bg-brand-50"
                 : "border-slate-200 bg-white",
             )}
           >
@@ -210,7 +210,7 @@ export function Ranking({
             </span>
             <span className="flex-1 truncate font-medium text-slate-800">
               {r.name}
-              {isMe && <span className="ml-1 text-xs text-indigo-500">(tú)</span>}
+              {isMe && <span className="ml-1 text-xs text-brand-600">(tú)</span>}
             </span>
             <span className="tabular text-right font-bold text-slate-900">
               {money(r.cumulativeProfit, currency)}

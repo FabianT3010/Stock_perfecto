@@ -4,7 +4,7 @@ export default function Home() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-4xl flex-col justify-center px-4 py-12">
       <div className="mb-10 text-center">
-        <span className="inline-block rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-indigo-700">
+        <span className="inline-block rounded-full bg-brand-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-brand-700">
           Simulación por rondas
         </span>
         <h1 className="mt-4 text-4xl font-black tracking-tight text-slate-900 sm:text-5xl">
@@ -23,7 +23,7 @@ export default function Home() {
       <div className="grid gap-5 sm:grid-cols-2">
         <Link
           href="/join"
-          className="group rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-md"
+          className="group rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-sm transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
         >
           <div className="text-3xl">🧑‍🎓</div>
           <h2 className="mt-3 text-xl font-bold text-slate-900">Soy participante</h2>
@@ -31,14 +31,14 @@ export default function Home() {
             Entra con el código de tu sala y compite por la mejor ganancia
             acumulada.
           </p>
-          <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-indigo-600 group-hover:gap-2">
+          <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-brand-700 group-hover:gap-2">
             Unirme a una sala →
           </span>
         </Link>
 
         <Link
           href="/facilitator"
-          className="group rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
+          className="group rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-sm transition hover:-translate-y-0.5 hover:border-accent-300 hover:shadow-md"
         >
           <div className="text-3xl">🎛️</div>
           <h2 className="mt-3 text-xl font-bold text-slate-900">Soy facilitador</h2>
@@ -46,7 +46,7 @@ export default function Home() {
             Crea una sala, controla las rondas, revela la demanda y proyecta el
             ranking.
           </p>
-          <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-emerald-600 group-hover:gap-2">
+          <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-accent-700 group-hover:gap-2">
             Crear una sala →
           </span>
         </Link>

@@ -69,7 +69,7 @@ export function Card({
 
 // ------------------------------------------------------------------- Button
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: "primary" | "secondary" | "ghost" | "danger" | "success";
+  variant?: "primary" | "secondary" | "ghost" | "danger" | "success" | "accent";
   size?: "md" | "lg";
 };
 
@@ -81,15 +81,17 @@ export function Button({
 }: ButtonProps) {
   const variants: Record<string, string> = {
     primary:
-      "bg-indigo-600 text-white hover:bg-indigo-500 focus-visible:outline-indigo-600",
+      "bg-brand-700 text-white hover:bg-brand-600 focus-visible:outline-brand-700",
     secondary:
       "bg-slate-100 text-slate-800 hover:bg-slate-200 focus-visible:outline-slate-400",
     ghost:
       "bg-transparent text-slate-600 hover:bg-slate-100 focus-visible:outline-slate-400",
     danger:
-      "bg-rose-600 text-white hover:bg-rose-500 focus-visible:outline-rose-600",
+      "bg-danger-600 text-white hover:bg-danger-500 focus-visible:outline-danger-600",
     success:
-      "bg-emerald-600 text-white hover:bg-emerald-500 focus-visible:outline-emerald-600",
+      "bg-brand-600 text-white hover:bg-brand-700 focus-visible:outline-brand-600",
+    accent:
+      "bg-accent-600 text-white hover:bg-accent-500 focus-visible:outline-accent-600",
   };
   return (
     <button
@@ -132,7 +134,7 @@ export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElem
     <input
       className={cx(
         "w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm",
-        "placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200",
+        "placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200",
         className,
       )}
       {...props}
@@ -145,11 +147,11 @@ export type StatTone = "neutral" | "profit" | "loss" | "warn" | "info" | "brand"
 
 const STAT_TONES: Record<StatTone, string> = {
   neutral: "border-slate-200 bg-slate-50 text-slate-900",
-  profit: "border-emerald-200 bg-emerald-50 text-emerald-900",
-  loss: "border-rose-200 bg-rose-50 text-rose-900",
-  warn: "border-amber-200 bg-amber-50 text-amber-900",
+  profit: "border-brand-200 bg-brand-50 text-brand-800",
+  loss: "border-danger-200 bg-danger-50 text-danger-700",
+  warn: "border-accent-200 bg-accent-50 text-accent-700",
   info: "border-sky-200 bg-sky-50 text-sky-900",
-  brand: "border-indigo-200 bg-indigo-50 text-indigo-900",
+  brand: "border-gold-200 bg-gold-50 text-gold-700",
 };
 
 export function Stat({
@@ -185,9 +187,9 @@ export function Badge({
   const tones: Record<string, string> = {
     neutral: "bg-slate-100 text-slate-600",
     pending: "bg-slate-100 text-slate-600",
-    open: "bg-emerald-100 text-emerald-700",
-    closed: "bg-amber-100 text-amber-700",
-    revealed: "bg-indigo-100 text-indigo-700",
+    open: "bg-brand-100 text-brand-700",
+    closed: "bg-accent-100 text-accent-700",
+    revealed: "bg-gold-100 text-gold-700",
   };
   return (
     <span
@@ -211,9 +213,9 @@ export function Callout({
 }) {
   const tones: Record<string, string> = {
     info: "border-sky-200 bg-sky-50 text-sky-800",
-    warn: "border-amber-200 bg-amber-50 text-amber-800",
-    error: "border-rose-200 bg-rose-50 text-rose-800",
-    success: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    warn: "border-accent-200 bg-accent-50 text-accent-700",
+    error: "border-danger-200 bg-danger-50 text-danger-700",
+    success: "border-brand-200 bg-brand-50 text-brand-800",
   };
   return (
     <div className={cx("rounded-xl border px-4 py-3 text-sm", tones[tone])}>
