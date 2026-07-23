@@ -1,5 +1,4 @@
-# Stock Perfecto 🏪
-
+# Stock Perfecto 
 Simulación competitiva **por rondas** del problema del *newsvendor* (vendedor de
 periódicos): cada participante administra un kiosco y decide **cuántas unidades
 preparar** antes de conocer la demanda real, buscando equilibrar ganancia,
@@ -11,7 +10,7 @@ se actualiza solo.
 
 ---
 
-## ✨ Características
+## Características
 
 - **Sin cuentas ni contraseñas.** El facilitador crea una sala → obtiene un
   **código** y un **PIN**. Los estudiantes entran con el código y su nombre.
@@ -27,14 +26,14 @@ se actualiza solo.
 - **Ranking con desempates**: mayor ganancia acumulada → menos ventas perdidas →
   menor sobrante → mejor nivel de servicio.
 
-## 🧱 Stack
+## Stack
 
 - [Next.js 16](https://nextjs.org/) (App Router, TypeScript) + React 19
 - [Tailwind CSS v4](https://tailwindcss.com/)
 - [Supabase](https://supabase.com/) (PostgreSQL + Realtime)
 - Despliegue en [Vercel](https://vercel.com/)
 
-## 📂 Estructura
+## Estructura
 
 ```
 src/
@@ -60,49 +59,53 @@ supabase/
   migrations/                Misma definición como migración para el CLI de Supabase
 ```
 
-## 🚀 Puesta en marcha (local)
+## Puertos fijos
 
-Necesitas **Node 20.9+**. Tienes dos caminos para la base de datos:
+El proyecto usa siempre los mismos puertos. Están elegidos por debajo de 49152
+para que Windows (Hyper-V/WSL) no pueda reservarlos y romper el arranque.
 
-### ⚡ Windows en un clic
+| Servicio             | Puerto | URL                      |
+| -------------------- | ------ | ------------------------ |
+| Aplicación           | 3100   | http://localhost:3100    |
+| Supabase API         | 44321  | http://127.0.0.1:44321   |
+| Supabase Base datos  | 44322  | `postgresql://…:44322`   |
+| Supabase Studio      | 44323  | http://localhost:44323   |
 
-- **`run.bat`** — levanta todo: verifica Docker, inicia Supabase local, elige un
-  puerto libre, arranca la app y abre el navegador.
-- **`stop.bat`** — apaga todo (Supabase local y contenedores).
+Se definen en `package.json` (app) y en `supabase/config.toml` (Supabase).
 
-Solo la primera vez: al terminar `supabase start`, copia las llaves a `.env.local`
-(ver [`.env.local.example`](./.env.local.example)) y vuelve a ejecutar `run.bat`.
+## Puesta en marcha (local)
 
-### Opción A — Supabase en la nube (recomendado para el evento)
+Requisitos: **Node 20.9+** y **Docker Desktop** abierto.
 
-Sigue [`DEPLOY.md`](./DEPLOY.md): crea el proyecto, ejecuta `supabase/schema.sql`
-y copia las llaves a `.env.local`.
+### Windows: un solo archivo
 
-### Opción B — Supabase local (requiere Docker)
+Ejecuta **`run.bat`**. Hace todo:
+
+1. Verifica que Docker esté corriendo.
+2. Instala dependencias si faltan.
+3. Crea `.env.local` con la configuración local si no existe.
+4. Levanta la base de datos (Supabase) y la aplicación.
+5. Abre el navegador en http://localhost:3100.
+
+Para **detener todo** (aplicación y base de datos), vuelve a esa misma ventana y
+presiona cualquier tecla. No hay más scripts: `run.bat` levanta y baja.
+
+### Otros sistemas (o manual)
 
 ```bash
 npm install
-npx supabase start          # levanta Postgres + Realtime y aplica migrations/
+npx supabase start     # base de datos + Realtime, aplica supabase/migrations/
+npm run dev            # aplicación en http://localhost:3100
 ```
 
-Copia las llaves que imprime `supabase start` a `.env.local`
-(ver [`.env.local.example`](./.env.local.example)):
+Para detener: `Ctrl+C` en la aplicación y `npx supabase stop`.
 
-```
-NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<ANON_KEY>
-SUPABASE_SERVICE_ROLE_KEY=<SERVICE_ROLE_KEY>
-```
+### Usar Supabase en la nube
 
-Luego:
+Sigue [`DEPLOY.md`](./DEPLOY.md): crea el proyecto, ejecuta `supabase/schema.sql`
+y pon esas llaves en `.env.local` (ver [`.env.local.example`](./.env.local.example)).
 
-```bash
-npm run dev                 # http://localhost:3000
-```
-
-Para detener Supabase local: `npx supabase stop`.
-
-### 🐳 Con Docker
+### Con Docker
 
 La app también corre containerizada (imagen *standalone* + `docker compose`).
 Ver [`DOCKER.md`](./DOCKER.md):
@@ -112,7 +115,7 @@ cp .env.docker.example .env      # completa las llaves
 docker compose up --build
 ```
 
-## 🎮 Cómo se juega
+## Cómo se juega
 
 1. **Facilitador:** entra a `/facilitator`, crea la sala y anota el **código** y el
    **PIN**. Comparte el código (o el enlace `/join?code=XXXX`) con los estudiantes.
@@ -122,7 +125,7 @@ docker compose up --build
    **Revelar demanda y resultados**. Avanza a la siguiente ronda.
 4. Tras la última ronda se corona al ganador por **ganancia acumulada**.
 
-## 🧮 Fórmulas (por ronda)
+## Fórmulas (por ronda)
 
 ```
 vendidas   = min(preparadas, demanda_real)
@@ -136,7 +139,7 @@ nivel_servicio        = vendidas / demanda_real
 eficiencia_inventario = vendidas / preparadas
 ```
 
-## 🔒 Modelo de privacidad
+## Modelo de privacidad
 
 - **Tablas públicas** (lectura anónima + Realtime): `sessions`, `rounds`,
   `participants`, `results`. La demanda real de una ronda es `NULL` hasta revelarla.
@@ -146,7 +149,7 @@ eficiencia_inventario = vendidas / preparadas
 - **Todas las escrituras** pasan por los *route handlers* del servidor. El
   navegador solo lee datos públicos y se suscribe a cambios.
 
-## ✅ Verificación
+## Verificación
 
 - Lógica del juego validada con los casos del enunciado (ganancia Bs 250,
   nivel de servicio 86 %).
@@ -154,7 +157,7 @@ eficiencia_inventario = vendidas / preparadas
   revelar → ranking), incluyendo controles de privacidad, autenticación y entrega
   de eventos por Realtime.
 
-## 📜 Scripts
+## Scripts
 
 ```bash
 npm run dev      # desarrollo

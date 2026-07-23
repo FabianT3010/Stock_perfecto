@@ -14,9 +14,9 @@ export function DemandBars({ history }: { history: number[] }) {
       {history.map((d, i) => (
         <div key={i} className="flex items-center gap-2">
           <span className="w-14 shrink-0 text-xs text-slate-400">Día {i + 1}</span>
-          <div className="h-5 flex-1 overflow-hidden rounded bg-slate-100">
+          <div className="h-5 flex-1 overflow-hidden rounded-sm bg-slate-100">
             <div
-              className="flex h-full items-center justify-end rounded bg-sky-400 pr-1.5 text-[10px] font-semibold text-white"
+              className="flex h-full items-center justify-end rounded-sm bg-sky-600 pr-1.5 text-[10px] font-semibold text-white"
               style={{ width: `${Math.max(8, (d / max) * 100)}%` }}
             >
               {d}
@@ -190,29 +190,37 @@ export function Ranking({
 }) {
   if (!ranking.length)
     return <p className="text-sm text-slate-400">Aún no hay resultados.</p>;
-  const medal = ["🥇", "🥈", "🥉"];
   return (
-    <ol className="space-y-1.5">
+    <ol className="divide-y divide-slate-100">
       {ranking.map((r) => {
         const isMe = r.participantId === highlightId;
         return (
           <li
             key={r.participantId}
             className={cx(
-              "flex items-center gap-3 rounded-xl border px-3 py-2",
-              isMe
-                ? "border-brand-300 bg-brand-50"
-                : "border-slate-200 bg-white",
+              "flex items-center gap-3 px-1 py-2",
+              isMe && "-mx-1 rounded-md bg-brand-50 px-2",
             )}
           >
-            <span className="w-7 shrink-0 text-center text-lg font-bold text-slate-400">
-              {medal[r.rank - 1] ?? r.rank}
+            <span
+              className={cx(
+                "flex h-6 w-6 shrink-0 items-center justify-center rounded text-xs font-bold tabular",
+                r.rank === 1
+                  ? "bg-gold-100 text-gold-700"
+                  : r.rank <= 3
+                    ? "bg-slate-100 text-slate-600"
+                    : "text-slate-400",
+              )}
+            >
+              {r.rank}
             </span>
-            <span className="flex-1 truncate font-medium text-slate-800">
+            <span className="flex-1 truncate text-sm font-medium text-slate-800">
               {r.name}
-              {isMe && <span className="ml-1 text-xs text-brand-600">(tú)</span>}
+              {isMe && (
+                <span className="ml-1 text-xs font-normal text-brand-600">(tú)</span>
+              )}
             </span>
-            <span className="tabular text-right font-bold text-slate-900">
+            <span className="tabular text-right text-sm font-bold text-slate-900">
               {money(r.cumulativeProfit, currency)}
             </span>
           </li>

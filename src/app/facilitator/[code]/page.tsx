@@ -300,8 +300,13 @@ function Control({ creds }: { creds: FacilitatorCreds }) {
                       )}
                     >
                       <span className="truncate text-slate-700">{p.name}</span>
-                      <span className="tabular font-semibold text-slate-500">
-                        {done ? `✓ ${qtyById.get(p.id)}` : "—"}
+                      <span
+                        className={cx(
+                          "tabular font-semibold",
+                          done ? "text-brand-700" : "text-slate-400",
+                        )}
+                      >
+                        {done ? qtyById.get(p.id) : "—"}
                       </span>
                     </li>
                   );
@@ -334,7 +339,7 @@ function Control({ creds }: { creds: FacilitatorCreds }) {
                     <td className="py-1.5 text-slate-500">Ronda {r.round_number}</td>
                     <td className="py-1.5 text-right font-semibold text-slate-800">
                       {r.status === "revealed" ? (
-                        <span className="text-brand-700">{r.real_demand} ✓</span>
+                        <span className="text-brand-700">{r.real_demand}</span>
                       ) : (
                         <span>{r.planned_demand ?? "—"}</span>
                       )}
@@ -386,7 +391,10 @@ function RoundControl({
       aside={<Badge tone={round.status}>{HINT_LABELS[round.hint_type] ?? round.hint_type}</Badge>}
     >
       {template && (
-        <p className="mb-4 text-sm text-slate-500">🎯 {template.objective}</p>
+        <p className="mb-4 text-sm text-slate-500">
+          <span className="font-semibold text-slate-600">Objetivo:</span>{" "}
+          {template.objective}
+        </p>
       )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -399,7 +407,14 @@ function RoundControl({
         <Field label={`Recup. (${currency})`}>
           <Input type="number" value={salvage} disabled={!editable} onChange={(e) => setSalvage(e.target.value)} />
         </Field>
-        <Field label="Demanda real 🔒">
+        <Field
+          label={
+            <>
+              Demanda real{" "}
+              <span className="font-normal text-slate-400">· oculta</span>
+            </>
+          }
+        >
           <Input
             type="number"
             value={demand}
@@ -449,17 +464,17 @@ function RoundControl({
         <div className="ml-auto flex gap-2">
           {round.status === "pending" && (
             <Button variant="success" disabled={busy} onClick={() => onAction("/api/rounds/open", round.round_number)}>
-              ▶ Abrir ronda
+              Abrir ronda
             </Button>
           )}
           {round.status === "open" && (
             <Button variant="danger" disabled={busy} onClick={() => onAction("/api/rounds/close", round.round_number)}>
-              ⏸ Cerrar ronda
+              Cerrar ronda
             </Button>
           )}
           {round.status === "closed" && (
             <Button disabled={busy} onClick={() => onAction("/api/rounds/reveal", round.round_number)}>
-              👁 Revelar demanda y resultados
+              Revelar resultados
             </Button>
           )}
           {round.status === "revealed" && (

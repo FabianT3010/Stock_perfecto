@@ -17,7 +17,7 @@ services:
         NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
         NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
     ports:
-      - "${APP_PORT:-3000}:3000"
+      - "${APP_PORT:-3100}:3000"
     environment:
       # Secreta: solo servidor, en tiempo de ejecución.
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}

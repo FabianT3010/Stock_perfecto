@@ -6,7 +6,6 @@
    Naranja #f15f24 · Rojo #bb0923 · Dorado #d3b574 (acentos)
    ============================================================================ */
 @theme {
-  /* Verde de marca (primario) */
   --color-brand-50: #ecf5f0;
   --color-brand-100: #cfe7dc;
   --color-brand-200: #a3d1bd;
@@ -18,7 +17,6 @@
   --color-brand-800: #013f2e;
   --color-brand-900: #002a1f;
 
-  /* Naranja de acento */
   --color-accent-50: #fef2ec;
   --color-accent-100: #fcd9c7;
   --color-accent-200: #f9b795;
@@ -26,7 +24,6 @@
   --color-accent-600: #db4e15;
   --color-accent-700: #b23f12;
 
-  /* Rojo (peligro / pérdidas) */
   --color-danger-50: #fceaed;
   --color-danger-100: #f7c9cf;
   --color-danger-200: #ef9aa4;
@@ -34,7 +31,6 @@
   --color-danger-600: #a1071d;
   --color-danger-700: #7f0517;
 
-  /* Dorado (detalle / destacados) */
   --color-gold-50: #faf6ec;
   --color-gold-100: #f1e6c9;
   --color-gold-200: #e6d3a1;
@@ -43,11 +39,11 @@
   --color-gold-700: #8c7038;
 }
 
-/* Tema claro pensado para proyectarse en clase (alto contraste). */
+/* Tema claro, sobrio, para proyectarse en clase (alto contraste). */
 :root {
   color-scheme: light;
-  --background: #f2f5f3;
-  --foreground: #1a2420;
+  --background: #eaeeec;
+  --foreground: #16211d;
 }
 
 @theme inline {
@@ -58,10 +54,8 @@
 }
 
 body {
-  background:
-    radial-gradient(1200px 600px at 100% -10%, #cfe7dc 0%, transparent 55%),
-    radial-gradient(1000px 520px at -10% 110%, #f1e6c9 0%, transparent 55%),
-    var(--background);
+  background: linear-gradient(180deg, #e2e8e5 0%, #eaeeec 45%, #eef1ef 100%);
+  background-attachment: fixed;
   color: var(--foreground);
   min-height: 100vh;
 }

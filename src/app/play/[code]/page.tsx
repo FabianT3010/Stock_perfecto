@@ -178,10 +178,18 @@ function PlayBoard({
             <Ranking ranking={ranking} currency={currency} highlightId={myId} />
           </Card>
           {session!.status === "finished" && ranking[0] && (
-            <Callout tone="success">
-              🏆 Ganador: <strong>{ranking[0].name}</strong> con{" "}
-              {money(ranking[0].cumulativeProfit, currency)}.
-            </Callout>
+            <div className="rounded-lg border border-gold-200 bg-gold-50 p-4">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-gold-700">
+                Resultado final
+              </div>
+              <div className="mt-1.5 text-sm text-slate-700">
+                Ganador:{" "}
+                <strong className="text-slate-900">{ranking[0].name}</strong>
+              </div>
+              <div className="tabular mt-0.5 text-xl font-bold text-gold-700">
+                {money(ranking[0].cumulativeProfit, currency)}
+              </div>
+            </div>
           )}
         </div>
       </div>

@@ -31,7 +31,7 @@ En **Project Settings → API** copia:
 | ------------------------- | -------------------------------- | --------- |
 | Project URL               | `NEXT_PUBLIC_SUPABASE_URL`       | No        |
 | `anon` `public` API key   | `NEXT_PUBLIC_SUPABASE_ANON_KEY`  | No        |
-| `service_role` `secret`   | `SUPABASE_SERVICE_ROLE_KEY`      | **Sí** 🔒 |
+| `service_role` `secret`   | `SUPABASE_SERVICE_ROLE_KEY`      | **Sí** |
 
 > La `service_role` es **secreta**: nunca la pongas en variables `NEXT_PUBLIC_` ni
 > la subas al repositorio. Solo se usa en el servidor.
