@@ -4,55 +4,51 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button, Callout, Card, Field, Input, Spinner } from "@/components/ui";
-import { participantStorageKey } from "@/lib/participant";
-import type { JoinResponse } from "@/lib/types";
+import { readTeam, saveTeam } from "@/lib/v2/team";
 
 export default function JoinPage() {
   const router = useRouter();
   const [code, setCode] = useState("");
-  const [name, setName] = useState("");
+  const [teamName, setTeamName] = useState("");
+  const [members, setMembers] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Precargar el código desde ?code=XXXX si el facilitador compartió el enlace.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const c = params.get("code");
+    const c = new URLSearchParams(window.location.search).get("code");
     if (c) setCode(c.toUpperCase());
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    const trimmedCode = code.trim().toUpperCase();
-    const trimmedName = name.trim();
-    if (!trimmedCode || !trimmedName) {
-      setError("Completa el código y tu nombre.");
+    const cd = code.trim().toUpperCase();
+    const nm = teamName.trim();
+    if (!cd || !nm) {
+      setError("Completa el código de la mesa y el nombre del equipo.");
       return;
     }
     setLoading(true);
     try {
-      const res = await fetch("/api/join", {
+      const existing = readTeam(cd);
+      const res = await fetch("/api/v2/join", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: trimmedCode, name: trimmedName }),
+        body: JSON.stringify({
+          code: cd,
+          teamName: nm,
+          members: members.split(",").map((m) => m.trim()).filter(Boolean),
+          token: existing?.token,
+        }),
       });
-      const data = (await res.json()) as JoinResponse | { error: string };
+      const data = await res.json();
       if (!res.ok) {
-        setError("error" in data ? data.error : "No se pudo unir a la sala.");
+        setError(data.error ?? "No se pudo entrar a la sala.");
         setLoading(false);
         return;
       }
-      const joined = data as JoinResponse;
-      localStorage.setItem(
-        participantStorageKey(joined.session.code),
-        JSON.stringify({
-          participantId: joined.participantId,
-          token: joined.token,
-          name: joined.name,
-        }),
-      );
-      router.push(`/play/${joined.session.code}`);
+      saveTeam(cd, { teamId: data.teamId, token: data.token, name: data.name });
+      router.push(`/play/${cd}`);
     } catch {
       setError("Error de red. Verifica tu conexión.");
       setLoading(false);
@@ -60,28 +56,35 @@ export default function JoinPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-4 py-12">
+    <main className="mx-auto flex min-h-[80vh] w-full max-w-md flex-col justify-center px-4 py-10">
       <Link href="/" className="mb-6 text-sm text-slate-500 hover:text-slate-700">
         ← Inicio
       </Link>
-      <Card title="Unirme a una sala">
+      <Card title="Entrar con mi equipo">
         <form onSubmit={handleSubmit} className="space-y-4">
-          <Field label="Código de sala" hint="Te lo dicta el facilitador.">
+          <Field label="Código de la mesa" hint="Está en el cartel de tu mesa.">
             <Input
               value={code}
               onChange={(e) => setCode(e.target.value.toUpperCase())}
-              placeholder="Ej: KX7P9M"
+              placeholder="Ej: KX7P9"
               autoCapitalize="characters"
               className="text-center text-lg font-bold tracking-widest"
               maxLength={8}
             />
           </Field>
-          <Field label="Tu nombre o equipo">
+          <Field label="Nombre del equipo">
             <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ej: Kiosco de Ana"
-              maxLength={40}
+              value={teamName}
+              onChange={(e) => setTeamName(e.target.value)}
+              placeholder="Ej: Los del fondo"
+              maxLength={30}
+            />
+          </Field>
+          <Field label="Integrantes (opcional)" hint="Separados por coma.">
+            <Input
+              value={members}
+              onChange={(e) => setMembers(e.target.value)}
+              placeholder="Ana, Beto, Caro"
             />
           </Field>
           {error && <Callout tone="error">{error}</Callout>}

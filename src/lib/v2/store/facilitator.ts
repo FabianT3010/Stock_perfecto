@@ -1,0 +1,71 @@
+// Store v2: estado completo del facilitador (incluye secretos) y expulsar equipo.
+import "server-only";
+import { db, verifyFacilitator } from "./context";
+import { ApiError } from "./http";
+
+export async function getFacilitatorState(code: string, pin: string) {
+  const session = await verifyFacilitator(code, pin);
+  const sid = session.id;
+
+  const [
+    { data: rounds },
+    { data: teams },
+    { data: products },
+    { data: suppliers },
+    { data: offers },
+    { data: demandPlan },
+    { data: snapshots },
+    { data: roundPlans },
+  ] = await Promise.all([
+    db().from("rounds").select("*").eq("session_id", sid).order("round_number"),
+    db().from("teams").select("*").eq("session_id", sid).order("created_at"),
+    db().from("products").select("*").eq("session_id", sid).order("sort_order"),
+    db().from("suppliers").select("*").eq("session_id", sid).order("sort_order"),
+    db().from("supplier_offers").select("*").eq("session_id", sid),
+    db().from("demand_plan").select("round_id, product_id, planned_demand").eq("session_id", sid),
+    db().from("kpi_snapshots").select("*").eq("session_id", sid),
+    db().from("round_plans").select("*"),
+  ]);
+
+  // qué equipos ya enviaron pedido en la ronda en curso
+  const currentRound = (rounds ?? []).find((r) => r.round_number === session.current_round);
+  let submittedTeamIds: string[] = [];
+  if (currentRound) {
+    const { data: orders } = await db()
+      .from("purchase_orders")
+      .select("team_id")
+      .eq("round_id", currentRound.id);
+    submittedTeamIds = [...new Set((orders ?? []).map((o) => o.team_id as string))];
+  }
+
+  const planIds = new Set((rounds ?? []).map((r) => r.id));
+  const plansForSession = (roundPlans ?? []).filter((p) => planIds.has(p.round_id));
+
+  return {
+    session,
+    rounds: rounds ?? [],
+    teams: teams ?? [],
+    products: products ?? [],
+    suppliers: suppliers ?? [],
+    offers: offers ?? [],
+    demandPlan: demandPlan ?? [],
+    snapshots: snapshots ?? [],
+    roundPlans: plansForSession,
+    submittedTeamIds,
+  };
+}
+
+export async function kickTeam(code: string, pin: string, teamId: string) {
+  const session = await verifyFacilitator(code, pin);
+  const { data: team } = await db()
+    .from("teams")
+    .select("id, session_id")
+    .eq("id", teamId)
+    .maybeSingle();
+  if (!team || team.session_id !== session.id) {
+    throw new ApiError(404, "Equipo no encontrado en esta sala.");
+  }
+  const { error } = await db().from("teams").delete().eq("id", teamId);
+  if (error) throw new ApiError(500, error.message);
+  return { ok: true };
+}
