@@ -30,6 +30,7 @@ create table if not exists public.sessions (
   total_rounds          integer not null default 5,
   max_teams             integer not null default 20 check (max_teams between 1 and 40),
   registration_open     boolean not null default true,
+  winners_revealed      boolean not null default false,
   default_round_seconds integer not null default 360 check (default_round_seconds between 30 and 7200),
   starting_cash         numeric not null default 800,
   fixed_cost_per_round  numeric not null default 60,
@@ -41,6 +42,7 @@ create table if not exists public.sessions (
 );
 alter table public.sessions add column if not exists max_teams integer not null default 20;
 alter table public.sessions add column if not exists registration_open boolean not null default true;
+alter table public.sessions add column if not exists winners_revealed boolean not null default false;
 alter table public.sessions add column if not exists default_round_seconds integer not null default 360;
 
 create table if not exists public.session_secrets (       -- SECRETA

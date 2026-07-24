@@ -256,7 +256,14 @@ function Board({
             />
           )
       )}
-      {tab === "podio" && <PodioTab ranking={ranking} meId={identity.teamId} finished={session!.status === "finished"} />}
+      {tab === "podio" && (
+        <PodioTab
+          ranking={ranking}
+          meId={identity.teamId}
+          finished={session!.status === "finished"}
+          winnersRevealed={session!.winners_revealed}
+        />
+      )}
     </PageShell>
   );
 }
@@ -864,15 +871,32 @@ function PodioTab({
   ranking,
   meId,
   finished,
+  winnersRevealed,
 }: {
   ranking: ReturnType<typeof rankTeams>;
   meId: string;
   finished: boolean;
+  winnersRevealed: boolean;
 }) {
+  if (finished && !winnersRevealed) {
+    return (
+      <div className="space-y-4">
+        <Card>
+          <div className="py-10 text-center">
+            <div className="text-5xl">🏆</div>
+            <div className="mt-3 text-lg font-bold text-slate-800">Los resultados están listos</div>
+            <p className="mt-1 text-sm text-slate-500">
+              El facilitador va a revelar el podio en la pantalla del proyector.
+            </p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
   return (
     <div className="space-y-4">
       {finished && ranking[0] && (
-        <div className="rounded-lg border border-gold-200 bg-gold-50 p-4">
+        <div className="animate-reveal-pop rounded-lg border border-gold-200 bg-gold-50 p-4">
           <div className="text-[10px] font-semibold uppercase tracking-wider text-gold-700">
             Resultado final
           </div>

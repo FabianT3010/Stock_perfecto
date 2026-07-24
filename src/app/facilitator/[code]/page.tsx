@@ -235,6 +235,25 @@ function Control({ creds }: { creds: FacilitatorCreds }) {
     } finally { setBusy(false); }
   }
 
+  async function revealWinners() {
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/v2/facilitator/reveal-winners", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, pin }),
+      });
+      const json = await response.json();
+      if (!response.ok) setError(json.error ?? "No se pudo revelar a los ganadores.");
+      await refresh();
+    } catch {
+      setError("Error de red.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function toggleRegistration(open: boolean) {
     setBusy(true);
     setError(null);
@@ -323,6 +342,29 @@ function Control({ creds }: { creds: FacilitatorCreds }) {
                 {session.registration_open ? "Cerrar inscripciones" : "Reabrir inscripciones"}
               </Button>
             </div>
+          </Card>
+        </div>
+      )}
+
+      {session.status === "finished" && (
+        <div className="mb-5">
+          <Card title="🏆 Semana 5 cerrada">
+            {session.winners_revealed ? (
+              <p className="text-sm font-semibold text-brand-700">
+                Ya revelaste a los ganadores. El proyector y los equipos ven el podio completo.
+              </p>
+            ) : (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-slate-600">
+                  El ranking está <b>oculto</b> para los equipos y el proyector hasta que reveles
+                  el podio. Cuando el grupo esté listo, pulsa el botón para lanzar la animación con
+                  el 2º y 1er puesto.
+                </p>
+                <Button variant="success" size="lg" disabled={busy} onClick={revealWinners}>
+                  Revelar ganadores 🎉
+                </Button>
+              </div>
+            )}
           </Card>
         </div>
       )}

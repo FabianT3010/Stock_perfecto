@@ -90,3 +90,19 @@ export async function setRegistration(code: string, pin: string, open: boolean) 
   if (error) throw new ApiError(500, error.message);
   return { ok: true, registrationOpen: open };
 }
+
+export async function revealWinners(code: string, pin: string) {
+  const session = await verifyFacilitator(code, pin);
+  if (session.status !== "finished") {
+    throw new ApiError(409, "Todavía no terminó la última semana.");
+  }
+  if (session.winners_revealed) {
+    return { ok: true, winnersRevealed: true };
+  }
+  const { error } = await db()
+    .from("sessions")
+    .update({ winners_revealed: true })
+    .eq("id", session.id);
+  if (error) throw new ApiError(500, error.message);
+  return { ok: true, winnersRevealed: true };
+}

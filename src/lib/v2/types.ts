@@ -25,6 +25,7 @@ export type SessionRow = {
   total_rounds: number;
   max_teams: number;
   registration_open: boolean;
+  winners_revealed: boolean;
   default_round_seconds: number;
   starting_cash: number;
   fixed_cost_per_round: number;
