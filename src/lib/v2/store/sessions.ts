@@ -340,6 +340,13 @@ export async function getTeamState(code: string, teamId: string, token: string) 
       .eq("round_id", openRound.id);
     myOrders = (orders ?? []) as typeof myOrders;
   }
+  const { data: submission, error: submissionError } = await db()
+    .from("order_submissions")
+    .select("team_id")
+    .eq("team_id", teamId)
+    .eq("round_id", openRound?.id ?? "00000000-0000-0000-0000-000000000000")
+    .maybeSingle();
+  if (submissionError) throw new ApiError(500, submissionError.message);
   const committed = myOrders.reduce((s, o) => s + Number(o.total_cost), 0);
   const { data: pendingOrders, error: pendingError } = await db()
     .from("purchase_orders")
@@ -359,6 +366,7 @@ export async function getTeamState(code: string, teamId: string, token: string) 
     session,
     team,
     openRound: openRound ?? null,
+    hasSubmitted: Boolean(submission),
     myOrders,
     pendingOrders: pendingOrders ?? [],
     productResults: productResults ?? [],

@@ -34,8 +34,8 @@ export const PRODUCTS: ProductSeed[] = [
   { sku: "PAN", name: "Pan de batalla", unitLabel: "u", salePrice: 0.8, shelfLifeRounds: 1, activeFromRound: 1, baseDemand: 150, startingStock: 60, initialExpiresAfterRound: 1 },
   { sku: "LECHE", name: "Leche PIL 1L", unitLabel: "u", salePrice: 7.5, shelfLifeRounds: 2, activeFromRound: 1, baseDemand: 30, startingStock: 12, initialExpiresAfterRound: 1 },
   { sku: "SNACKS", name: "Snack surtido", unitLabel: "bolsita", salePrice: 2.5, shelfLifeRounds: null, activeFromRound: 1, baseDemand: 110, startingStock: 40, initialExpiresAfterRound: null },
-  { sku: "HUEVOS", name: "Maple de huevos", unitLabel: "maple", salePrice: 36.0, shelfLifeRounds: 3, activeFromRound: 2, baseDemand: 8, startingStock: 2, initialExpiresAfterRound: null },
-  { sku: "DETERG", name: "Detergente 400 g", unitLabel: "u", salePrice: 11.0, shelfLifeRounds: null, activeFromRound: 2, baseDemand: 6, startingStock: 4, initialExpiresAfterRound: null },
+  { sku: "HUEVOS", name: "Maple de huevos", unitLabel: "maple", salePrice: 36.0, shelfLifeRounds: 3, activeFromRound: 0, baseDemand: 8, startingStock: 2, initialExpiresAfterRound: null },
+  { sku: "DETERG", name: "Detergente 400 g", unitLabel: "u", salePrice: 11.0, shelfLifeRounds: null, activeFromRound: 0, baseDemand: 6, startingStock: 4, initialExpiresAfterRound: null },
 ];
 
 // ------------------------------------------------------------- Proveedores (2)

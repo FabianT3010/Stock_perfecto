@@ -92,8 +92,9 @@ export async function revealRound(code: string, pin: string, roundNumber: number
     db().from("products").select("id, sku, sale_price, shelf_life_rounds").eq("session_id", session.id),
     db().from("teams").select("id, cash, debt, score_total, service_sum, rounds_played").eq("session_id", session.id),
     db().from("kpi_snapshots").select("team_id, profit_cumulative").eq("session_id", session.id).eq("round_number", roundNumber - 1),
-    db().from("inventory_lots").select("id, team_id, product_id, qty_remaining, unit_cost, expires_after_round, acquired_round").eq("session_id", session.id).gt("qty_remaining", 0),
+    db().from("inventory_lots").select("id, team_id, product_id, qty_remaining, qty_initial, unit_cost, expires_after_round, acquired_round, order_id").eq("session_id", session.id).gt("qty_remaining", 0),
     db().from("purchase_orders").select("id, team_id, product_id, qty, unit_cost, total_cost, placed_round, arrives_round").eq("session_id", session.id).eq("status", "pending"),
+    db().from("purchase_orders").select("id, team_id, qty, unit_cost").eq("session_id", session.id).eq("arrives_round", roundNumber).eq("status", "delivered").lt("placed_round", roundNumber),
     db().from("demand_plan").select("product_id, planned_demand").eq("round_id", round.id),
     db().from("order_submissions").select("team_id").eq("round_id", round.id),
     db().from("suppliers").select("id, code").eq("session_id", session.id),
@@ -134,6 +135,20 @@ export async function revealRound(code: string, pin: string, roundNumber: number
     placedRound: Number(o.placed_round),
     arrivesRound: Number(o.arrives_round),
   }));
+  const deliveredQtyByOrderId = new Map(
+    (lotsData ?? [])
+      .filter((lot) => lot.order_id)
+      .map((lot) => [lot.order_id as string, Number(lot.qty_initial)]),
+  );
+  const openingRefundByTeam = new Map<string, number>();
+  for (const order of deliveredTruckOrders ?? []) {
+    const deliveredQty = deliveredQtyByOrderId.get(order.id as string) ?? 0;
+    const refund = Math.max(0, Number(order.qty) - deliveredQty) * Number(order.unit_cost);
+    if (refund > 0) {
+      const teamId = order.team_id as string;
+      openingRefundByTeam.set(teamId, (openingRefundByTeam.get(teamId) ?? 0) + refund);
+    }
+  }
 
   type AutoOrder = EngineOrder & {
     offerId: string;
@@ -197,7 +212,7 @@ export async function revealRound(code: string, pin: string, roundNumber: number
   const deliveryFactor = (round.supply_config as SupplyConfig | null)?.deliveryFactor ?? 1;
 
   const result = closeRoundEngine(
-    { roundNumber, deliveryFactor },
+    { roundNumber, deliveryFactor, openingRefundByTeam },
     config,
     engineProducts,
     engineTeams,

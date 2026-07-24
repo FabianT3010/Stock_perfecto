@@ -122,10 +122,13 @@ export function useGameData(code: string): GameData {
         .on("postgres_changes", { event: "*", schema: "public", table: "sessions", filter: `id=eq.${sid}` }, () => loadDynamic(sid))
         .on("postgres_changes", { event: "*", schema: "public", table: "rounds", filter: `session_id=eq.${sid}` }, (payload) => {
           loadDynamic(sid);
-          if ((payload.new as { status?: string } | null)?.status === "revealed") {
+          const status = (payload.new as { status?: string } | null)?.status;
+          if (status === "open" || status === "revealed") {
             loadInventory(sid);
           }
         })
+        .on("postgres_changes", { event: "*", schema: "public", table: "inventory_lots", filter: `session_id=eq.${sid}` }, () => loadInventory(sid))
+        .on("postgres_changes", { event: "*", schema: "public", table: "inventory_moves", filter: `session_id=eq.${sid}` }, () => loadInventory(sid))
         .subscribe((status) => {
           if (cancelled) return;
           if (status === "SUBSCRIBED") {

@@ -61,6 +61,8 @@ export type EngineRound = {
   roundNumber: number;
   /** Fracción de lo pedido que realmente llega (1 normal, 0.5 R4). */
   deliveryFactor: number;
+  /** Reembolsos de entregas del camión ya acreditados al abrir la ronda. */
+  openingRefundByTeam?: ReadonlyMap<string, number>;
 };
 
 // ---------------------------------------------------------------- salidas
@@ -200,7 +202,8 @@ export function closeRoundEngine(
     const myOrders = ordersByTeam.get(team.id) ?? [];
 
     // 1) LLEGADAS (con factor de entrega; el faltante se reembolsa)
-    let purchasesRefund = 0;
+    let purchasesRefund = roundInfo.openingRefundByTeam?.get(team.id) ?? 0;
+    let refundsAppliedAtClose = 0;
     for (const o of myOrders) {
       if (o.arrivesRound !== R) continue;
       deliveredOrderIds.push(o.id);
@@ -212,7 +215,9 @@ export function closeRoundEngine(
       const deliveredQty = Math.floor(o.qty * factor);
       const undelivered = o.qty - deliveredQty;
       if (undelivered > 0) {
-        purchasesRefund += undelivered * o.unitCost;
+        const refund = undelivered * o.unitCost;
+        purchasesRefund += refund;
+        refundsAppliedAtClose += refund;
         moves.push({ teamId: team.id, productId: o.productId, lotId: null, newLotTempId: null, roundNumber: R, type: "refund", qty: undelivered });
       }
       if (deliveredQty > 0) {
@@ -308,7 +313,7 @@ export function closeRoundEngine(
     // 6) CAJA, GANANCIA, DEUDA (caja ≠ ganancia, a propósito)
     const cashStart = team.cashPrev;
     const cashRaw = round2(
-      cashStart + revenue + purchasesRefund - purchasesCashOut - holdingCost - fixedCost,
+      cashStart + revenue + refundsAppliedAtClose - purchasesCashOut - holdingCost - fixedCost,
     );
     const newDebt = cashRaw < 0 ? -cashRaw : 0;
     const cashEnd = cashRaw < 0 ? 0 : cashRaw;

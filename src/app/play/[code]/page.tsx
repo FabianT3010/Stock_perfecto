@@ -119,6 +119,7 @@ type Tab = "inicio" | "operacion" | "podio";
 
 type TeamState = {
   availableCash: number;
+  hasSubmitted: boolean;
   myOrders: { offer_id: string; product_id: string; qty: number; total_cost: number }[];
   pendingOrders: {
     id: string;
@@ -158,6 +159,7 @@ function Board({
         const j = await res.json();
         setTeamState({
           availableCash: j.availableCash,
+          hasSubmitted: Boolean(j.hasSubmitted),
           myOrders: j.myOrders ?? [],
           pendingOrders: j.pendingOrders ?? [],
           openRound: j.openRound,
@@ -429,15 +431,18 @@ function ProductResultComparison({
         <table className="w-full min-w-[900px] text-sm tabular">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
-              <th className="py-2 pr-2">Producto</th>
-              <th className="px-2 text-right">Precio de venta</th>
-              <th className="px-2 text-right">Costo La Principal</th>
-              <th className="px-2 text-right">Costo Don Lucho</th>
-              <th className="px-2 text-right">Demanda real</th>
-              <th className="px-2 text-right">Vendido</th>
-              <th className="px-2 text-right">Ingreso por ventas</th>
-              <th className="px-2 text-right">Venta perdida</th>
-              <th className="px-2 text-right">Dinero no ingresado</th>
+              <th className="py-2 pr-2" rowSpan={2}>Producto</th>
+              <th className="px-2 text-right" rowSpan={2}>Precio de venta</th>
+              <th className="px-2 text-center" colSpan={2}>Costos de distribuidores</th>
+              <th className="px-2 text-right" rowSpan={2}>Demanda real</th>
+              <th className="px-2 text-right" rowSpan={2}>Vendido</th>
+              <th className="px-2 text-right" rowSpan={2}>Ingreso por ventas</th>
+              <th className="px-2 text-right" rowSpan={2}>Venta perdida</th>
+              <th className="px-2 text-right" rowSpan={2}>Dinero no ingresado</th>
+            </tr>
+            <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
+              <th className="px-2 text-right">La Principal</th>
+              <th className="px-2 text-right">Don Lucho</th>
             </tr>
           </thead>
           <tbody>
@@ -509,6 +514,7 @@ function OperacionTab({
   const [msg, setMsg] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
   const isOpen = round?.status === "open";
+  const hasSubmitted = teamState?.hasSubmitted ?? false;
   const roundNo = round?.round_number ?? Math.max(1, data.session!.current_round);
   const supply = (round?.supply_config as SupplyConfig | null) ?? {
     luchoCap: 999999,
@@ -533,6 +539,7 @@ function OperacionTab({
   const overBudget = remaining < -1e-6;
 
   function setQty(offerId: string, qty: number, pack: number, max: number) {
+    if (hasSubmitted) return;
     const clamped = Math.max(0, Math.min(max, Math.round(qty / pack) * pack));
     setCart((current) => {
       const next = { ...current, [offerId]: clamped };
@@ -542,7 +549,7 @@ function OperacionTab({
   }
 
   async function submit() {
-    if (!round || !isOpen) return;
+    if (!round || !isOpen || hasSubmitted) return;
     setSaving(true);
     setMsg(null);
     try {
@@ -557,7 +564,7 @@ function OperacionTab({
       const j = await res.json();
       if (!res.ok) setMsg({ tone: "error", text: j.error ?? "No se pudo enviar el pedido." });
       else {
-        setMsg({ tone: "success", text: `Pedido guardado (${j.lines} líneas, ${money(j.totalCost)}). Puedes cambiarlo hasta que cierren la semana.` });
+        setMsg({ tone: "success", text: `Pedido guardado y bloqueado (${j.lines} líneas, ${money(j.totalCost)}). La Principal se incorporará al inventario al abrir su semana de llegada; Don Lucho llega antes de las ventas de esta semana.` });
         onSubmitted();
       }
     } catch {
@@ -581,8 +588,8 @@ function OperacionTab({
                 {money(remaining)}
               </div>
             </div>
-            <Button onClick={submit} disabled={saving || overBudget} size="lg">
-              {saving ? <Spinner /> : "Guardar pedido"}
+            <Button onClick={submit} disabled={saving || overBudget || hasSubmitted} size="lg">
+              {saving ? <Spinner /> : hasSubmitted ? "Pedido guardado" : "Guardar pedido"}
             </Button>
           </div>
         </>
@@ -594,6 +601,11 @@ function OperacionTab({
       )}
 
       {msg && <Callout tone={msg.tone}>{msg.text}</Callout>}
+      {hasSubmitted && !msg && (
+        <Callout tone="success">
+          <b>Pedido guardado y bloqueado.</b> Ya no se puede modificar durante esta semana.
+        </Callout>
+      )}
 
       {products.map((product) => {
         const stock = inventoryById.get(product.id);
@@ -603,6 +615,15 @@ function OperacionTab({
         const historical = data.history
           .filter((row) => row.product_id === product.id)
           .sort((a, b) => a.week_number - b.week_number);
+        const lastCompletedRound = round?.status === "revealed" ? roundNo : roundNo - 1;
+        const gameHistory = data.productResults
+          .filter(
+            (row) =>
+              row.team_id === identity.teamId &&
+              row.product_id === product.id &&
+              row.round_number <= lastCompletedRound,
+          )
+          .sort((a, b) => a.round_number - b.round_number);
         const pending = (teamState?.pendingOrders ?? []).filter(
           (order) => order.product_id === product.id && order.arrives_round >= roundNo,
         );
@@ -651,8 +672,8 @@ function OperacionTab({
                   {pending.map((order, index) => (
                     <span key={order.id}>
                       {index > 0 && " · "}
-                      {int(order.qty)} u pedidas en S{order.placed_round}; llegan al
-                      inicio de S{order.arrives_round}, antes de vender.
+                      {int(order.qty)} u pedidas en S{order.placed_round}; se incorporan
+                      automáticamente al inventario al abrir S{order.arrives_round}, antes de decidir y vender.
                     </span>
                   ))}
                 </Callout>
@@ -660,13 +681,14 @@ function OperacionTab({
 
               <details className="rounded-md border border-slate-200 bg-slate-50">
                 <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-slate-700">
-                  Historial de ventas y ventas perdidas ({historical.length} semanas)
+                  Historial de demanda, ventas y ventas perdidas ({historical.length + gameHistory.length} semanas)
                 </summary>
                 <div className="overflow-x-auto border-t border-slate-200 bg-white p-2">
                   <table className="w-full min-w-[520px] text-xs tabular">
                     <thead>
                       <tr className="text-left uppercase text-slate-500">
-                        <th className="px-2 py-1">Semana histórica</th>
+                        <th className="px-2 py-1">Semana</th>
+                        <th className="px-2 py-1 text-right">Demanda</th>
                         <th className="px-2 py-1 text-right">Vendido</th>
                         <th className="px-2 py-1 text-right">Venta perdida</th>
                         <th className="px-2 py-1 text-right">Dinero no ingresado</th>
@@ -675,10 +697,20 @@ function OperacionTab({
                     <tbody>
                       {historical.map((history) => (
                         <tr key={history.id} className="border-t border-slate-100">
-                          <td className="px-2 py-1">{history.week_number}</td>
+                          <td className="px-2 py-1">S{history.week_number}</td>
+                          <td className="px-2 py-1 text-right">{int(history.units_sold + history.lost_sales)} u</td>
                           <td className="px-2 py-1 text-right">{int(history.units_sold)} u</td>
                           <td className="px-2 py-1 text-right">{int(history.lost_sales)} u</td>
                           <td className="px-2 py-1 text-right">{money(history.lost_sales * Number(product.sale_price))}</td>
+                        </tr>
+                      ))}
+                      {gameHistory.map((result) => (
+                        <tr key={result.id} className="border-t border-slate-100">
+                          <td className="px-2 py-1">S{result.round_number}</td>
+                          <td className="px-2 py-1 text-right">{int(result.demand_units)} u</td>
+                          <td className="px-2 py-1 text-right">{int(result.sold_units)} u</td>
+                          <td className="px-2 py-1 text-right">{int(result.lost_units)} u</td>
+                          <td className="px-2 py-1 text-right">{money(Number(result.lost_revenue))}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -693,7 +725,7 @@ function OperacionTab({
                 const sup = supById.get(offer.supplier_id);
                 const express = sup?.is_express;
                 const supplierAvailable = express ? true : supply.principalAvailable;
-                const available = Boolean(isOpen && active && supplierAvailable);
+                const available = Boolean(isOpen && !hasSubmitted && active && supplierAvailable);
                 const max = express ? supply.luchoCap : 5000;
                 const qty = cart[offer.id] ?? 0;
                 const arrivalRound = roundNo + offer.lead_time_rounds;
