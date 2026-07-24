@@ -22,6 +22,7 @@ import {
 } from "@/components/ui";
 import { useGameData, type GameData } from "@/lib/v2/useGameData";
 import {
+  availableStockForRound,
   byId,
   currentRound,
   inventoryByProduct,
@@ -450,6 +451,7 @@ function ProductResultComparison({
               <th className="py-2 pr-2" rowSpan={2}>Producto</th>
               <th className="px-2 text-right" rowSpan={2}>Precio de venta</th>
               <th className="px-2 text-center" colSpan={2}>Costos de distribuidores</th>
+              <th className="px-2 text-right" rowSpan={2}>Inventario de la semana</th>
               <th className="px-2 text-right" rowSpan={2}>Demanda real</th>
               <th className="px-2 text-right" rowSpan={2}>Vendido</th>
               <th className="px-2 text-right" rowSpan={2}>Ingreso por ventas</th>
@@ -472,6 +474,7 @@ function ProductResultComparison({
                 (offer) => supplierById.get(offer.supplier_id)?.code === "LUCHO",
               )?.unit_cost;
               const refundQty = refundQtyByProduct.get(row.product_id) ?? 0;
+              const availableStock = availableStockForRound(data.moves, teamId, row.product_id, roundNumber);
               return (
                 <tr key={row.id} className="border-b border-slate-100">
                   <td className="py-2 pr-2 font-medium text-slate-800">{product?.name}</td>
@@ -486,6 +489,7 @@ function ProductResultComparison({
                     )}
                   </td>
                   <td className="px-2 text-right">{luchoCost == null ? "—" : money(Number(luchoCost))}</td>
+                  <td className="px-2 text-right">{int(availableStock)} u</td>
                   <td className="px-2 text-right font-semibold">{int(row.demand_units)} u</td>
                   <td className="px-2 text-right text-brand-700">{int(row.sold_units)} u</td>
                   <td className="px-2 text-right text-brand-700">{money(Number(row.sales_revenue))}</td>

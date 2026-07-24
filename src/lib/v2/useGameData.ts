@@ -152,6 +152,7 @@ export function useGameData(code: string): GameData {
       reTimer = setTimeout(() => {
         if (cancelled) return;
         loadDynamic(sid);
+        loadInventory(sid);
         subscribe(sid);
       }, delay);
     }
@@ -174,7 +175,10 @@ export function useGameData(code: string): GameData {
 
       subscribe(sessionId);
       pollTimer = setInterval(() => {
-        if (!cancelled && sessionId) loadDynamic(sessionId);
+        if (!cancelled && sessionId) {
+          loadDynamic(sessionId);
+          loadInventory(sessionId);
+        }
       }, POLL_MS);
     }
 

@@ -1,6 +1,7 @@
 // Derivaciones puras del cliente sobre los datos públicos v2.
 import type {
   InventoryLotRow,
+  InventoryMoveRow,
   KpiSnapshotRow,
   ProductRow,
   RoundRow,
@@ -84,4 +85,32 @@ export function offersForProduct(
 
 export function byId<T extends { id: string }>(rows: T[]): Map<string, T> {
   return new Map(rows.map((r) => [r.id, r]));
+}
+
+/**
+ * Inventario disponible para vender en una ronda (herencia/stock inicial +
+ * llegadas hasta esa ronda, menos lo vendido y mermado en rondas anteriores).
+ * Reconstruido desde inventory_moves: no depende del estado actual de los
+ * lotes, así que funciona igual para rondas pasadas.
+ */
+export function availableStockForRound(
+  moves: InventoryMoveRow[],
+  teamId: string,
+  productId: string,
+  roundNumber: number,
+): number {
+  const mine = moves.filter((m) => m.team_id === teamId && m.product_id === productId);
+  let stock = 0;
+  for (let r = 0; r <= roundNumber; r++) {
+    for (const m of mine) {
+      if (m.round_number !== r) continue;
+      if (m.type === "initial" || m.type === "arrival") stock += m.qty;
+    }
+    if (r === roundNumber) break;
+    for (const m of mine) {
+      if (m.round_number !== r) continue;
+      if (m.type === "sale" || m.type === "spoilage") stock -= m.qty;
+    }
+  }
+  return stock;
 }
