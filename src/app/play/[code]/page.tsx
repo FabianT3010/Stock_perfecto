@@ -130,6 +130,15 @@ type TeamState = {
     arrives_round: number;
     total_cost: number;
   }[];
+  arrivedOrders: {
+    id: string;
+    product_id: string;
+    qty: number;
+    unit_cost: number;
+    placed_round: number;
+    arrives_round: number;
+    delivered_qty: number;
+  }[];
   openRound: { id: string; round_number: number } | null;
 };
 
@@ -162,6 +171,7 @@ function Board({
           hasSubmitted: Boolean(j.hasSubmitted),
           myOrders: j.myOrders ?? [],
           pendingOrders: j.pendingOrders ?? [],
+          arrivedOrders: j.arrivedOrders ?? [],
           openRound: j.openRound,
         });
       }
@@ -422,6 +432,12 @@ function ProductResultComparison({
     );
   if (!rows.length) return null;
   const lostRevenue = rows.reduce((sum, row) => sum + Number(row.lost_revenue), 0);
+  const refundQtyByProduct = new Map<string, number>();
+  for (const move of data.moves) {
+    if (move.team_id !== teamId || move.round_number !== roundNumber || move.type !== "refund") continue;
+    refundQtyByProduct.set(move.product_id, (refundQtyByProduct.get(move.product_id) ?? 0) + move.qty);
+  }
+  const totalRefundQty = [...refundQtyByProduct.values()].reduce((s, q) => s + q, 0);
   return (
     <div className="mt-4">
       <div className="mb-2 text-sm font-semibold text-slate-700">
@@ -455,11 +471,20 @@ function ProductResultComparison({
               const luchoCost = productOffers.find(
                 (offer) => supplierById.get(offer.supplier_id)?.code === "LUCHO",
               )?.unit_cost;
+              const refundQty = refundQtyByProduct.get(row.product_id) ?? 0;
               return (
                 <tr key={row.id} className="border-b border-slate-100">
                   <td className="py-2 pr-2 font-medium text-slate-800">{product?.name}</td>
                   <td className="px-2 text-right">{money(Number(product?.sale_price ?? 0))}</td>
-                  <td className="px-2 text-right">{principalCost == null ? "—" : money(Number(principalCost))}</td>
+                  <td className="px-2 text-right">
+                    {principalCost == null ? "—" : money(Number(principalCost))}
+                    {refundQty > 0 && (
+                      <div className="text-[10px] font-normal normal-case text-amber-700">
+                        Camión trajo −{int(refundQty)} u
+                        {principalCost != null && <> (reembolsó {money(refundQty * Number(principalCost))})</>}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-2 text-right">{luchoCost == null ? "—" : money(Number(luchoCost))}</td>
                   <td className="px-2 text-right font-semibold">{int(row.demand_units)} u</td>
                   <td className="px-2 text-right text-brand-700">{int(row.sold_units)} u</td>
@@ -472,6 +497,13 @@ function ProductResultComparison({
           </tbody>
         </table>
       </div>
+      {totalRefundQty > 0 && (
+        <Callout tone="warn">
+          El camión de La Principal entregó menos de lo pedido esta semana: <b>{int(totalRefundQty)} u</b> no
+          llegaron y se reembolsaron a la caja (ver detalle por producto arriba). Esto redujo el stock
+          disponible para vender.
+        </Callout>
+      )}
       <Callout tone={lostRevenue > 0 ? "warn" : "success"}>
         {lostRevenue > 0
           ? <>Las ventas perdidas representan <b>{money(lostRevenue)}</b> que no ingresaron a caja.</>
@@ -627,6 +659,9 @@ function OperacionTab({
         const pending = (teamState?.pendingOrders ?? []).filter(
           (order) => order.product_id === product.id && order.arrives_round >= roundNo,
         );
+        const arrived = (teamState?.arrivedOrders ?? []).filter(
+          (order) => order.product_id === product.id,
+        );
         const expiringNow = stock?.lots.some(
           (lot) =>
             lot.expires_after_round != null &&
@@ -665,6 +700,25 @@ function OperacionTab({
                   value={active ? `Desde semana ${product.active_from_round}` : `Se habilita en semana ${product.active_from_round}`}
                 />
               </div>
+
+              {arrived.length > 0 && (
+                <Callout tone={arrived.some((o) => o.delivered_qty < o.qty) ? "warn" : "success"}>
+                  <b>Llegó tu pedido de La Principal:</b>{" "}
+                  {arrived.map((order, index) => (
+                    <span key={order.id}>
+                      {index > 0 && " · "}
+                      {int(order.delivered_qty)} de {int(order.qty)} u pedidas en S{order.placed_round}{" "}
+                      ya están en tu inventario.
+                      {order.delivered_qty < order.qty && (
+                        <>
+                          {" "}Faltaron {int(order.qty - order.delivered_qty)} u — se reembolsó{" "}
+                          {money((order.qty - order.delivered_qty) * order.unit_cost)} a tu caja.
+                        </>
+                      )}
+                    </span>
+                  ))}
+                </Callout>
+              )}
 
               {pending.length > 0 && (
                 <Callout tone="info">

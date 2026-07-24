@@ -362,6 +362,57 @@ export async function getTeamState(code: string, teamId: string, token: string) 
     .order("round_number");
   if (resultError) throw new ApiError(500, resultError.message);
 
+  // pedidos a La Principal que llegaron justo al abrir esta semana (para avisar
+  // al equipo cuánto entró realmente, ya que un camión con deliveryFactor < 1
+  // puede entregar menos de lo pedido).
+  let arrivedOrders: {
+    id: string;
+    product_id: string;
+    qty: number;
+    unit_cost: number;
+    placed_round: number;
+    arrives_round: number;
+    delivered_qty: number;
+  }[] = [];
+  if (openRound) {
+    const { data: suppliers, error: suppliersError } = await db()
+      .from("suppliers")
+      .select("id, code")
+      .eq("session_id", session.id);
+    if (suppliersError) throw new ApiError(500, suppliersError.message);
+    const principalId = (suppliers ?? []).find((s) => s.code === "PRINCIPAL")?.id as string | undefined;
+    if (principalId) {
+      const { data: delivered, error: deliveredError } = await db()
+        .from("purchase_orders")
+        .select("id, product_id, qty, unit_cost, placed_round, arrives_round")
+        .eq("team_id", teamId)
+        .eq("supplier_id", principalId)
+        .eq("status", "delivered")
+        .eq("arrives_round", openRound.round_number);
+      if (deliveredError) throw new ApiError(500, deliveredError.message);
+      if (delivered && delivered.length > 0) {
+        const { data: lots, error: lotsError } = await db()
+          .from("inventory_lots")
+          .select("order_id, qty_initial")
+          .eq("team_id", teamId)
+          .in("order_id", delivered.map((o) => o.id as string));
+        if (lotsError) throw new ApiError(500, lotsError.message);
+        const deliveredQtyByOrder = new Map(
+          (lots ?? []).map((l) => [l.order_id as string, Number(l.qty_initial)]),
+        );
+        arrivedOrders = delivered.map((o) => ({
+          id: o.id as string,
+          product_id: o.product_id as string,
+          qty: Number(o.qty),
+          unit_cost: Number(o.unit_cost),
+          placed_round: Number(o.placed_round),
+          arrives_round: Number(o.arrives_round),
+          delivered_qty: deliveredQtyByOrder.get(o.id as string) ?? 0,
+        }));
+      }
+    }
+  }
+
   return {
     session,
     team,
@@ -369,6 +420,7 @@ export async function getTeamState(code: string, teamId: string, token: string) 
     hasSubmitted: Boolean(submission),
     myOrders,
     pendingOrders: pendingOrders ?? [],
+    arrivedOrders,
     productResults: productResults ?? [],
     availableCash: Number(team.cash) - committed,
   };
