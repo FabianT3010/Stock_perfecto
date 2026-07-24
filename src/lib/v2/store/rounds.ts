@@ -84,6 +84,7 @@ export async function revealRound(code: string, pin: string, roundNumber: number
     { data: prevSnaps },
     { data: lotsData },
     { data: ordersData },
+    { data: deliveredTruckOrders },
     { data: demandData },
     { data: submissions },
     { data: suppliers },
