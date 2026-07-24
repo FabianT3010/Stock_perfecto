@@ -27,7 +27,6 @@ import {
   currentRound,
   inventoryByProduct,
   latestKpi,
-  rankTeams,
 } from "@/lib/v2/derive";
 import { teamStorageKey, type TeamIdentity } from "@/lib/v2/team";
 import { money, int, percent } from "@/lib/format";
@@ -116,7 +115,7 @@ function TeamGame({ code }: { code: string }) {
   return <Board code={code} identity={identity} data={data} />;
 }
 
-type Tab = "inicio" | "operacion" | "podio";
+type Tab = "inicio" | "operacion";
 
 type TeamState = {
   availableCash: number;
@@ -186,8 +185,6 @@ function Board({
   }, [refreshTeamState, round?.id, round?.status]);
 
   const myTeam = data.teams.find((t) => t.id === identity.teamId);
-  const ranking = useMemo(() => rankTeams(data.teams, data.kpis), [data.teams, data.kpis]);
-  const myRank = ranking.find((t) => t.id === identity.teamId);
   const last = latestKpi(data.kpis, identity.teamId);
 
   const valorTienda = myTeam
@@ -211,7 +208,7 @@ function Board({
           tone="brand"
           label="Valor de la Tienda"
           value={money(valorTienda)}
-          sub={myRank ? `Puesto ${myRank.rank} de ${ranking.length}` : weekLabel}
+          sub={weekLabel}
         />
       }
     >
@@ -224,7 +221,7 @@ function Board({
 
       {/* pestañas */}
       <nav className="mb-5 flex gap-1 overflow-x-auto rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
-        {(["inicio", "operacion", "podio"] as Tab[]).map((t) => (
+        {(["inicio", "operacion"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -234,7 +231,7 @@ function Board({
               t === "operacion" && isOpen && tab !== t && "text-brand-700",
             )}
           >
-            {t === "inicio" ? "Resumen" : t === "operacion" ? "Inventario y compras" : "Clasificación"}
+            {t === "inicio" ? "Resumen" : "Inventario y compras"}
             {t === "operacion" && isOpen && <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-accent-500 align-middle" />}
           </button>
         ))}
@@ -255,14 +252,6 @@ function Board({
               onSubmitted={refreshTeamState}
             />
           )
-      )}
-      {tab === "podio" && (
-        <PodioTab
-          ranking={ranking}
-          meId={identity.teamId}
-          finished={session!.status === "finished"}
-          winnersRevealed={session!.winners_revealed}
-        />
       )}
     </PageShell>
   );
@@ -866,74 +855,3 @@ function formatCountdown(ms: number): string {
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
 
-// -------------------------------------------------------------------- Podio
-function PodioTab({
-  ranking,
-  meId,
-  finished,
-  winnersRevealed,
-}: {
-  ranking: ReturnType<typeof rankTeams>;
-  meId: string;
-  finished: boolean;
-  winnersRevealed: boolean;
-}) {
-  if (finished && !winnersRevealed) {
-    return (
-      <div className="space-y-4">
-        <Card>
-          <div className="py-10 text-center">
-            <div className="text-5xl">🏆</div>
-            <div className="mt-3 text-lg font-bold text-slate-800">Los resultados están listos</div>
-            <p className="mt-1 text-sm text-slate-500">
-              El facilitador va a revelar el podio en la pantalla del proyector.
-            </p>
-          </div>
-        </Card>
-      </div>
-    );
-  }
-  return (
-    <div className="space-y-4">
-      {finished && ranking[0] && (
-        <div className="animate-reveal-pop rounded-lg border border-gold-200 bg-gold-50 p-4">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-gold-700">
-            Resultado final
-          </div>
-          <div className="mt-1 text-sm text-slate-700">
-            Mejores Analistas del Barrio: <b className="text-slate-900">{ranking[0].name}</b>
-          </div>
-          <div className="tabular mt-0.5 text-xl font-bold text-gold-700">{money(ranking[0].score_total)}</div>
-        </div>
-      )}
-      <Card title="Clasificación · Valor de la Tienda">
-        {ranking.length === 0 ? (
-          <p className="text-sm text-slate-400">Aún no hay resultados.</p>
-        ) : (
-          <ol className="divide-y divide-slate-100">
-            {ranking.map((t) => {
-              const isMe = t.id === meId;
-              return (
-                <li key={t.id} className={cx("flex items-center gap-3 px-1 py-2", isMe && "-mx-1 rounded-md bg-brand-50 px-2")}>
-                  <span
-                    className={cx(
-                      "tabular flex h-6 w-6 shrink-0 items-center justify-center rounded text-xs font-bold",
-                      t.rank === 1 ? "bg-gold-100 text-gold-700" : t.rank <= 3 ? "bg-slate-100 text-slate-600" : "text-slate-400",
-                    )}
-                  >
-                    {t.rank}
-                  </span>
-                  <span className="flex-1 truncate text-sm font-medium text-slate-800">
-                    {t.name}
-                    {isMe && <span className="ml-1 text-xs font-normal text-brand-600">(tú)</span>}
-                  </span>
-                  <span className="tabular text-right text-sm font-bold text-slate-900">{money(t.score_total)}</span>
-                </li>
-              );
-            })}
-          </ol>
-        )}
-      </Card>
-    </div>
-  );
-}
