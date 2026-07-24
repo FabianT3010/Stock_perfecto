@@ -4,6 +4,7 @@ import type {
   InventoryMoveRow,
   KpiSnapshotRow,
   ProductRow,
+  ProductRoundResultRow,
 } from "@/lib/v2/types";
 
 /** Paleta de series a prueba de daltonismo (Okabe-Ito reordenada, validada CVD). */
@@ -76,14 +77,49 @@ export function moneyByWeek(kpis: KpiSnapshotRow[], teamId: string): ChartRow[] 
 export function serviceByWeek(kpis: KpiSnapshotRow[], teamId: string): ChartRow[] {
   return myKpisSorted(kpis, teamId).map((k) => ({
     week: k.round_number,
-    "Servicio (%)": Math.round(k.service_level * 100),
+    "Clientes atendidos (%)": Math.round(k.service_level * 100),
   }));
 }
 
-/** Ventas perdidas (unidades) por semana. */
-export function lostByWeek(kpis: KpiSnapshotRow[], teamId: string): ChartRow[] {
-  return myKpisSorted(kpis, teamId).map((k) => ({
-    week: k.round_number,
-    "No atendidas": k.lost_sales,
-  }));
+/** Ventas perdidas históricas y del juego, en unidades y valor de venta. */
+export function lostByWeek(
+  history: HistoryWeekRow[],
+  productResults: ProductRoundResultRow[],
+  products: ProductRow[],
+  teamId: string,
+): ChartRow[] {
+  const priceByProduct = new Map(products.map((product) => [product.id, Number(product.sale_price)]));
+  const histWeeks = [...new Set(history.map((row) => row.week_number))].sort((a, b) => a - b);
+  const gameWeeks = [
+    ...new Set(
+      productResults
+        .filter((row) => row.team_id === teamId)
+        .map((row) => row.round_number),
+    ),
+  ].sort((a, b) => a - b);
+
+  const historical = histWeeks.map((week) => {
+    const rows = history.filter((row) => row.week_number === week);
+    return {
+      week,
+      "Ventas perdidas (u)": rows.reduce((sum, row) => sum + row.lost_sales, 0),
+      "Ventas perdidas (Bs)": Math.round(
+        rows.reduce(
+          (sum, row) => sum + row.lost_sales * (priceByProduct.get(row.product_id) ?? 0),
+          0,
+        ),
+      ),
+    };
+  });
+  const game = gameWeeks.map((week) => {
+    const rows = productResults.filter(
+      (row) => row.team_id === teamId && row.round_number === week,
+    );
+    return {
+      week,
+      "Ventas perdidas (u)": rows.reduce((sum, row) => sum + row.lost_units, 0),
+      "Ventas perdidas (Bs)": Math.round(rows.reduce((sum, row) => sum + Number(row.lost_revenue), 0)),
+    };
+  });
+  return [...historical, ...game];
 }

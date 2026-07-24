@@ -1,8 +1,7 @@
 "use client";
 
-// Pestaña "Datos": presets de 1 clic + gráficos con Recharts. Se importa con
-// next/dynamic({ssr:false}) desde la pantalla del equipo, así el bundle de
-// gráficos no bloquea el flujo crítico (unirse / pedir).
+// Panel de datos integrado a Inventario y compras. Se carga de forma diferida
+// para que los gráficos no bloqueen el flujo crítico de ingreso.
 import { useMemo, useState } from "react";
 import {
   Bar,
@@ -54,7 +53,10 @@ export default function DataTab({ data, teamId }: { data: GameData; teamId: stri
   );
   const moneyRows = useMemo(() => moneyByWeek(data.kpis, teamId), [data.kpis, teamId]);
   const serviceRows = useMemo(() => serviceByWeek(data.kpis, teamId), [data.kpis, teamId]);
-  const lostRows = useMemo(() => lostByWeek(data.kpis, teamId), [data.kpis, teamId]);
+  const lostRows = useMemo(
+    () => lostByWeek(data.history, data.productResults, data.products, teamId),
+    [data.history, data.productResults, data.products, teamId],
+  );
 
   // productos con algún dato en ventas
   const salesProducts = data.products
@@ -140,10 +142,10 @@ export default function DataTab({ data, teamId }: { data: GameData; teamId: stri
               <XAxis dataKey="week" tickFormatter={(w) => `S${w}`} tick={AXIS} />
               <YAxis domain={[0, 100]} tick={AXIS} width={40} />
               <Tooltip labelFormatter={(w) => `Semana ${w}`} />
-              <Line type="monotone" dataKey="Servicio (%)" stroke={SERIES_PALETTE[1]} strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 5 }} />
+              <Line type="monotone" dataKey="Clientes atendidos (%)" stroke={SERIES_PALETTE[1]} strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 5 }} />
             </LineChart>
           </ChartFrame>
-          {showTable && <DataTable rows={serviceRows} cols={["week", "Servicio (%)"]} weekTick={(w) => `S${w}`} />}
+          {showTable && <DataTable rows={serviceRows} cols={["week", "Clientes atendidos (%)"]} weekTick={(w) => `S${w}`} />}
         </>
       );
     }
@@ -154,20 +156,23 @@ export default function DataTab({ data, teamId }: { data: GameData; teamId: stri
         <ChartFrame>
           <BarChart data={lostRows} margin={{ top: 8, right: 12, bottom: 4, left: -8 }}>
             <CartesianGrid stroke={GRID} vertical={false} />
-            <XAxis dataKey="week" tickFormatter={(w) => `S${w}`} tick={AXIS} />
+            <XAxis dataKey="week" tickFormatter={weekTick} tick={AXIS} />
             <YAxis tick={AXIS} width={40} />
-            <Tooltip labelFormatter={(w) => `Semana ${w}`} />
-            <Bar dataKey="No atendidas" fill={SERIES_PALETTE[5]} radius={[4, 4, 0, 0]} maxBarSize={48} />
+            <Tooltip labelFormatter={(w) => (Number(w) < 0 ? `Semana ${w} (historia)` : `Semana ${w}`)} />
+            <Legend wrapperStyle={{ fontSize: 12 }} />
+            <ReferenceLine x={0} stroke="#94a3b8" strokeDasharray="4 4" />
+            <Bar dataKey="Ventas perdidas (u)" fill={SERIES_PALETTE[5]} radius={[4, 4, 0, 0]} maxBarSize={32} />
+            <Bar dataKey="Ventas perdidas (Bs)" fill={SERIES_PALETTE[2]} radius={[4, 4, 0, 0]} maxBarSize={32} />
           </BarChart>
         </ChartFrame>
-        {showTable && <DataTable rows={lostRows} cols={["week", "No atendidas"]} weekTick={(w) => `S${w}`} />}
+        {showTable && <DataTable rows={lostRows} cols={["week", "Ventas perdidas (u)", "Ventas perdidas (Bs)"]} weekTick={weekTick} />}
       </>
     );
   }
 
   return (
     <Card
-      title="Datos de tu tienda"
+      title="Datos históricos y resultados"
       aside={
         <button onClick={() => setShowTable((v) => !v)} className="text-xs font-semibold text-brand-700 hover:underline">
           {showTable ? "Ocultar tabla" : "Ver tabla"}

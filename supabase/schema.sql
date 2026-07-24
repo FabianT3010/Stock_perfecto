@@ -4,7 +4,8 @@
 -- Modelo de visibilidad (mismo patrón que v1):
 --   PÚBLICAS (anon SELECT + Realtime en las que cambian en juego):
 --     sessions, rounds, teams, products, suppliers, supplier_offers,
---     history_weeks, inventory_lots, inventory_moves, kpi_snapshots
+--     history_weeks, inventory_lots, inventory_moves, kpi_snapshots,
+--     product_round_results
 --   SECRETAS (sin políticas anon + revoke; solo service_role):
 --     session_secrets, team_secrets, round_plans, demand_plan, purchase_orders,
 --     order_submissions
@@ -273,6 +274,27 @@ create table if not exists public.kpi_snapshots (
 create index if not exists kpi_session_idx on public.kpi_snapshots(session_id);
 create index if not exists kpi_team_idx on public.kpi_snapshots(team_id, round_number);
 
+-- ----------------------------------------------- product_round_results (PUB)
+create table if not exists public.product_round_results (
+  id             uuid primary key default gen_random_uuid(),
+  session_id     uuid not null references public.sessions(id) on delete cascade,
+  team_id        uuid not null references public.teams(id) on delete cascade,
+  round_id       uuid not null references public.rounds(id) on delete cascade,
+  round_number   integer not null,
+  product_id     uuid not null references public.products(id) on delete cascade,
+  demand_units   integer not null,
+  sold_units     integer not null,
+  lost_units     integer not null,
+  sales_revenue  numeric not null,
+  lost_revenue   numeric not null,
+  created_at     timestamptz not null default now(),
+  unique (team_id, round_id, product_id)
+);
+create index if not exists product_results_session_idx
+  on public.product_round_results(session_id, round_number);
+create index if not exists product_results_team_idx
+  on public.product_round_results(team_id, round_number);
+
 -- ----------------------------------------------------------- history_weeks (PUB)
 create table if not exists public.history_weeks (
   id          uuid primary key default gen_random_uuid(),
@@ -304,13 +326,15 @@ alter table public.order_submissions enable row level security;
 alter table public.inventory_lots   enable row level security;
 alter table public.inventory_moves  enable row level security;
 alter table public.kpi_snapshots    enable row level security;
+alter table public.product_round_results enable row level security;
 alter table public.history_weeks    enable row level security;
 
 do $$
 declare t text;
 begin
   foreach t in array array['sessions','products','suppliers','supplier_offers',
-    'teams','rounds','inventory_lots','inventory_moves','kpi_snapshots','history_weeks']
+    'teams','rounds','inventory_lots','inventory_moves','kpi_snapshots',
+    'product_round_results','history_weeks']
   loop
     execute format('drop policy if exists "public read %1$s" on public.%1$I', t);
     execute format(
@@ -594,6 +618,9 @@ $$;
 drop function if exists public.apply_round_result(
   uuid, uuid, integer, jsonb, jsonb, jsonb, jsonb, jsonb, boolean
 );
+drop function if exists public.apply_round_result(
+  uuid, uuid, integer, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, boolean
+);
 
 create or replace function public.apply_round_result(
   p_session_id uuid,
@@ -604,6 +631,7 @@ create or replace function public.apply_round_result(
   p_lot_patches jsonb,
   p_moves jsonb,
   p_delivered_order_ids jsonb,
+  p_product_results jsonb,
   p_kpis jsonb,
   p_finish boolean
 ) returns void
@@ -697,6 +725,29 @@ begin
       select value::uuid
       from jsonb_array_elements_text(coalesce(p_delivered_order_ids, '[]'::jsonb))
     );
+
+  insert into public.product_round_results (
+    session_id, team_id, round_id, round_number, product_id,
+    demand_units, sold_units, lost_units, sales_revenue, lost_revenue
+  )
+  select
+    p_session_id, x.team_id, p_round_id, p_round_number, x.product_id,
+    x.demand_units, x.sold_units, x.lost_units, x.sales_revenue, x.lost_revenue
+  from jsonb_to_recordset(coalesce(p_product_results, '[]'::jsonb)) as x(
+    team_id uuid,
+    product_id uuid,
+    demand_units integer,
+    sold_units integer,
+    lost_units integer,
+    sales_revenue numeric,
+    lost_revenue numeric
+  )
+  on conflict (team_id, round_id, product_id) do update set
+    demand_units = excluded.demand_units,
+    sold_units = excluded.sold_units,
+    lost_units = excluded.lost_units,
+    sales_revenue = excluded.sales_revenue,
+    lost_revenue = excluded.lost_revenue;
 
   insert into public.kpi_snapshots (
     session_id, team_id, round_id, round_number, revenue, purchases_cash_out,
@@ -799,13 +850,13 @@ revoke all on function public.register_game_team(uuid, text, text[], text, text,
 revoke all on function public.open_game_round(uuid, integer, integer) from public, anon, authenticated;
 revoke all on function public.close_game_round(uuid, integer) from public, anon, authenticated;
 revoke all on function public.set_game_round_time(uuid, integer, integer) from public, anon, authenticated;
-revoke all on function public.apply_round_result(uuid, uuid, integer, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, boolean) from public, anon, authenticated;
+revoke all on function public.apply_round_result(uuid, uuid, integer, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, boolean) from public, anon, authenticated;
 grant execute on function public.replace_team_orders(uuid, uuid, uuid, jsonb) to service_role;
 grant execute on function public.register_game_team(uuid, text, text[], text, text, jsonb) to service_role;
 grant execute on function public.open_game_round(uuid, integer, integer) to service_role;
 grant execute on function public.close_game_round(uuid, integer) to service_role;
 grant execute on function public.set_game_round_time(uuid, integer, integer) to service_role;
-grant execute on function public.apply_round_result(uuid, uuid, integer, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, boolean) to service_role;
+grant execute on function public.apply_round_result(uuid, uuid, integer, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, boolean) to service_role;
 
 -- ============================================================================
 -- Realtime: SOLO las públicas que cambian durante el juego.

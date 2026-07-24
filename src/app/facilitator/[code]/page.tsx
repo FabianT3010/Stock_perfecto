@@ -415,8 +415,8 @@ function Control({ creds }: { creds: FacilitatorCreds }) {
           <Card title="Indicadores del grupo">
             <div className="grid grid-cols-2 gap-2">
               <Stat tone="brand" label="Semanas reveladas" value={`${revealedCount}/${session.total_rounds}`} />
-              <Stat tone="info" label="Servicio prom." value={percent(avgService)} />
-              <Stat tone="warn" label="Merma total" value={money(totalMerma)} />
+              <Stat tone="info" label="Clientes atendidos (prom.)" value={percent(avgService)} />
+              <Stat tone="warn" label="Pérdida por vencimiento" value={money(totalMerma)} />
               <Stat tone="loss" label="Deuda total" value={money(totalDebt)} />
             </div>
           </Card>

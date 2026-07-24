@@ -114,7 +114,7 @@ export const ROUND_SCRIPTS: RoundScript[] = [
     title: "La primera semana",
     event: {
       headline: "Semana normal — conozcan su tienda",
-      description: "Hereden la tienda de Doña Peta. Revisen el estante y el cuaderno.",
+      description: "Hereden la tienda de Doña Peta. Revisen el inventario y el cuaderno.",
       icon: "inicio",
     },
     supply: { luchoCap: LUCHO_CAP, principalAvailable: false, deliveryFactor: 1 },
@@ -162,11 +162,11 @@ export const ROUND_SCRIPTS: RoundScript[] = [
     title: "Vuelve Doña Peta",
     event: {
       headline: "Vuelve Doña Peta — se cierra la caja",
-      description: "El estante que quede el último día vale la mitad. Última compra fina; el camión ya no llegaría.",
+      description: "El inventario que quede el último día vale la mitad. Última compra fina; el camión ya no llegaría.",
       icon: "cierre",
     },
     supply: { luchoCap: LUCHO_CAP, principalAvailable: false, deliveryFactor: 1 },
-    facilitatorNotes: "Fin de horizonte: el estante lleno el último día es plata perdida. La Principal bloqueada.",
+    facilitatorNotes: "Fin de horizonte: demasiado inventario el último día es plata perdida. La Principal bloqueada.",
     multipliers: {},
   },
 ];

@@ -126,9 +126,42 @@ const facRevealed = await post("/api/v2/facilitator/state", { code: created.code
 assert(facRevealed.snapshots.filter((snapshot) => snapshot.round_number === 1).length === 2, "Reveal debe persistir un KPI por equipo.");
 assert(facRevealed.rounds.find((round) => round.round_number === 1).status === "revealed", "R1 debe quedar revelada.");
 assert(facRevealed.teams.find((team) => team.id === beta.teamId).cash !== 800, "El piloto automático de Beta debe ejecutar una compra conservadora.");
+const alfaAfterReveal = await post("/api/v2/teams/state", {
+  code: created.code,
+  teamId: alfa.teamId,
+  token: alfa.token,
+});
+const r1ProductResults = alfaAfterReveal.productResults.filter((result) => result.round_number === 1);
+assert(r1ProductResults.length === 6, "Reveal debe persistir demanda, venta y pérdida para los seis productos.");
+assert(
+  r1ProductResults.every((result) => Number.isFinite(Number(result.lost_revenue))),
+  "Cada resultado debe valorar en Bs las ventas perdidas.",
+);
 
 // La máquina de estados debe impedir saltar semanas.
 await post("/api/v2/rounds/open", { code: created.code, pin: created.pin, roundNumber: 3 }, 409);
 await post("/api/v2/rounds/open", { code: created.code, pin: created.pin, roundNumber: 2 });
+const facRound2 = await post("/api/v2/facilitator/state", { code: created.code, pin: created.pin });
+const round2 = facRound2.rounds.find((round) => round.round_number === 2);
+const principal = facRound2.suppliers.find((supplier) => supplier.code === "PRINCIPAL");
+const principalOffer = facRound2.offers.find((offer) => offer.supplier_id === principal.id);
+await post("/api/v2/orders", {
+  code: created.code,
+  teamId: alfa.teamId,
+  token: alfa.token,
+  roundId: round2.id,
+  orders: [{ offerId: principalOffer.id, qty: principalOffer.pack_size }],
+});
+const alfaWithTruckOrder = await post("/api/v2/teams/state", {
+  code: created.code,
+  teamId: alfa.teamId,
+  token: alfa.token,
+});
+assert(
+  alfaWithTruckOrder.pendingOrders.some(
+    (order) => order.supplier_id === principal.id && order.placed_round === 2 && order.arrives_round === 3,
+  ),
+  "El pedido del camión debe informar que se pidió en S2 y llega al inicio de S3.",
+);
 
-console.log(`SMOKE OK · sala ${created.code} · autorregistro, recuperación, cupo, tiempo editable, compra 0 y reveal validados`);
+console.log(`SMOKE OK · sala ${created.code} · autorregistro, tiempo, resultados por producto y llegada del camión validados`);

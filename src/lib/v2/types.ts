@@ -156,6 +156,20 @@ export type KpiSnapshotRow = {
   score_total: number;
 };
 
+export type ProductRoundResultRow = {
+  id: string;
+  session_id: string;
+  team_id: string;
+  round_id: string;
+  round_number: number;
+  product_id: string;
+  demand_units: number;
+  sold_units: number;
+  lost_units: number;
+  sales_revenue: number;
+  lost_revenue: number;
+};
+
 export type HistoryWeekRow = {
   id: string;
   session_id: string;

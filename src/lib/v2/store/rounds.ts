@@ -208,6 +208,30 @@ export async function revealRound(code: string, pin: string, roundNumber: number
 
   // Persistencia atómica en PostgreSQL: o se publica TODO o no cambia nada.
   const orderIdByTempId = new Map(result.newLots.map((n) => [n.tempId, n.orderId]));
+  const productResults = (teams ?? []).flatMap((team) =>
+    (products ?? []).map((product) => {
+      const soldUnits = result.moves
+        .filter(
+          (move) =>
+            move.teamId === team.id &&
+            move.productId === product.id &&
+            move.type === "sale",
+        )
+        .reduce((sum, move) => sum + move.qty, 0);
+      const demandUnits = demand.get(product.id as string) ?? 0;
+      const lostUnits = Math.max(0, demandUnits - soldUnits);
+      const salePrice = Number(product.sale_price);
+      return {
+        team_id: team.id,
+        product_id: product.id,
+        demand_units: demandUnits,
+        sold_units: soldUnits,
+        lost_units: lostUnits,
+        sales_revenue: Math.round(soldUnits * salePrice * 100) / 100,
+        lost_revenue: Math.round(lostUnits * salePrice * 100) / 100,
+      };
+    }),
+  );
   const { error: applyError } = await db().rpc("apply_round_result", {
     p_session_id: session.id,
     p_round_id: round.id,
@@ -247,6 +271,7 @@ export async function revealRound(code: string, pin: string, roundNumber: number
       qty: m.qty,
     })),
     p_delivered_order_ids: result.deliveredOrderIds,
+    p_product_results: productResults,
     p_kpis: result.kpis.map((k) => ({
       team_id: k.teamId,
       revenue: k.revenue,

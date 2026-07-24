@@ -69,7 +69,9 @@ export type HistoryEntry = {
 export function generateHistory(seed: number): HistoryEntry[] {
   const rng = mulberry32((seed ^ 0x85ebca6b) >>> 0);
   const cfg = HISTORY_CONFIG;
-  const histProducts = PRODUCTS.filter((p) => p.activeFromRound === 1);
+  // El cuaderno histórico cubre todo el catálogo, incluso los productos que la
+  // tienda empieza a gestionar recién en R2.
+  const histProducts = PRODUCTS;
   const out: HistoryEntry[] = [];
   for (let w = -HISTORY_WEEKS; w <= -1; w++) {
     const weeksFromStart = w + HISTORY_WEEKS; // 0..7

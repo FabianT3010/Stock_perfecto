@@ -36,9 +36,9 @@ proyectes: contiene las credenciales de todos los equipos.
 
 **Merma:** un producto vencido vale cero.
 
-**Valor final del estante:** 50 % de su costo.
+**Valor final del inventario:** 50 % de su costo.
 
-| Producto | Venta | Vence | Estante inicial | Activo desde |
+| Producto | Precio de venta | Vence | Inventario inicial | Activo desde |
 |---|---:|---:|---:|---:|
 | Refresco 2L | Bs 15,00 | no | 20 | semana 1 |
 | Pan de batalla | Bs 0,80 | 1 semana | 60 | semana 1 |

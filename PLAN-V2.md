@@ -282,17 +282,21 @@ Guion palabra por palabra, diccionario del analista y debrief de cierre: [anexo 
 
 Wireframes completos en [anexo 04](./docs/design/04-ux-dashboards.md), con estos recortes del MVP:
 
-- **Principio: un número grande por pantalla.** 5 pestañas: `Inicio` · `Tienda` ·
-  `Pedido●` · `Datos` · `Podio`. Header fijo: `Semana 2/5 · ⏱ 04:10`.
+- **Tres pestañas claras:** `Resumen` · `Inventario y compras●` ·
+  `Clasificación`. Inventario, costos, pedido e histórico viven juntos por
+  producto para evitar saltos de contexto. Header fijo: `Semana 2/5 · ⏱ 04:10`.
 - **Inicio:** **4 KPIs** (Caja · Ganancia · Caseros atendidos · Merma), semáforo = ícono +
   palabra (nunca solo color), umbrales definidos como % del capital inicial (sobreviven a
-  la calibración). El "valor del estante" es una línea informativa en Tienda; el
-  Valor/puesto vive en Podio. Tap en KPI → su gráfico.
-- **Pedido:** steppers de 56px, impacto en caja EN VIVO ("te quedan Bs 441"), validación
+  la calibración). El valor del inventario se informa al costo; el
+  Valor/puesto vive en Clasificación.
+- **Inventario y compras:** una tarjeta por producto con inventario disponible,
+  precio de venta, valor al costo, vencimiento, ocho semanas históricas, ventas
+  perdidas en unidades/Bs, costos de ambos proveedores y fecha exacta de llegada.
+  Incluye steppers de 56px, impacto en caja EN VIVO ("te quedan Bs 441"), validación
   inline ("se compra por cajas de 6 — te faltan 2"), botón bloqueado si excede caja,
   editable hasta el cierre.
-- **Resultado:** takeover con la ganancia (± grande) y **"el viaje de tu inventario"** —
-  la ecuación vertical con pérdidas SIEMPRE en Bs ("7 caseros se fueron = Bs 21 que volaron").
+- **Resultado:** comparación por producto de demanda real, unidades vendidas,
+  ingreso, venta perdida y dinero no ingresado; pérdidas siempre en unidades y Bs.
 - **Datos:** **4 presets de 1 clic** (*¿Cuánto se vende normalmente? · ¿Estoy pidiendo
   bien? · ¿Dónde está mi plata? · ¿Cuántas ventas perdí?*) + chips de producto. Línea o
   barras preseleccionado, histórico separado con "← hoy", "Ver tabla" siempre. Panel
@@ -323,7 +327,8 @@ de la crítica. **Se conserva la cañería, se reescribe el dominio** (~30% del 
 actual se reutiliza: clientes Supabase, http, ids, tokens, primitivas UI, y los patrones).
 
 - **Esquema v2 (reducido):** públicas `sessions, rounds, teams, products, suppliers,
-  supplier_offers, history_weeks, inventory_lots, inventory_moves, kpi_snapshots`;
+  supplier_offers, history_weeks, inventory_lots, inventory_moves, kpi_snapshots,
+  product_round_results` (comparación revelada de demanda/venta/pérdida por producto);
   secretas `session_secrets (PIN 6 dígitos + rate limit en BD), team_secrets,
   round_plans (evento + supply_shock jsonb), demand_plan (NOT NULL — demanda vacía
   imposible), purchase_orders, order_submissions` (pedido y constancia de envío;
@@ -363,7 +368,7 @@ actual se reutiliza: clientes Supabase, http, ids, tokens, primitivas UI, y los 
 | **F2** | Schema v2 reducido + seed (catálogo, ofertas, historia, guion) + calibrador canónico `tools/calibrate.mjs` y lanzador `tools/sim.py` | 1,5 |
 | **F3** | `engine.ts` FEFO + ≥12 tests vitest (incl. estrategias de ataque) | 2,0 |
 | **F4** | `store/` + API v2 + rate-limit PIN + autorregistro transaccional de equipos | 2,0 |
-| **F5** | UI equipo: 5 pestañas + trazabilidad + 4 presets de gráficos | 2,5 |
+| **F5** | UI equipo: 3 pestañas, operación unificada, trazabilidad y 4 presets de gráficos | 2,5 |
 | **F6** | Panel facilitador + proyector estático | 1,5 |
 | **F7** | **Ensayo general** (20 pestañas + celulares reales) + regenerar Hojas del Analista con números finales + guía del facilitador | 1,0 |
 | | **Total MVP** | **12,0** |

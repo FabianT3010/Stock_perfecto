@@ -341,12 +341,27 @@ export async function getTeamState(code: string, teamId: string, token: string) 
     myOrders = (orders ?? []) as typeof myOrders;
   }
   const committed = myOrders.reduce((s, o) => s + Number(o.total_cost), 0);
+  const { data: pendingOrders, error: pendingError } = await db()
+    .from("purchase_orders")
+    .select("id, supplier_id, product_id, qty, placed_round, arrives_round, total_cost")
+    .eq("team_id", teamId)
+    .eq("status", "pending")
+    .order("arrives_round");
+  if (pendingError) throw new ApiError(500, pendingError.message);
+  const { data: productResults, error: resultError } = await db()
+    .from("product_round_results")
+    .select("*")
+    .eq("team_id", teamId)
+    .order("round_number");
+  if (resultError) throw new ApiError(500, resultError.message);
 
   return {
     session,
     team,
     openRound: openRound ?? null,
     myOrders,
+    pendingOrders: pendingOrders ?? [],
+    productResults: productResults ?? [],
     availableCash: Number(team.cash) - committed,
   };
 }

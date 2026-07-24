@@ -12,6 +12,7 @@ import type {
   InventoryMoveRow,
   KpiSnapshotRow,
   ProductRow,
+  ProductRoundResultRow,
   RoundRow,
   SessionRow,
   SupplierOfferRow,
@@ -31,6 +32,7 @@ export type GameData = {
   offers: SupplierOfferRow[];
   history: HistoryWeekRow[];
   kpis: KpiSnapshotRow[];
+  productResults: ProductRoundResultRow[];
   lots: InventoryLotRow[];
   moves: InventoryMoveRow[];
 };
@@ -47,6 +49,7 @@ const EMPTY: GameData = {
   offers: [],
   history: [],
   kpis: [],
+  productResults: [],
   lots: [],
   moves: [],
 };
@@ -85,17 +88,19 @@ export function useGameData(code: string): GameData {
     }
 
     async function loadDynamic(sid: string) {
-      const [sess, rounds, teams, kpis] = await Promise.all([
+      const [sess, rounds, teams, kpis, productResults] = await Promise.all([
         supabase.from("sessions").select("*").eq("id", sid).maybeSingle(),
         supabase.from("rounds").select("*").eq("session_id", sid).order("round_number"),
         supabase.from("teams").select("*").eq("session_id", sid).order("created_at"),
         supabase.from("kpi_snapshots").select("*").eq("session_id", sid),
+        supabase.from("product_round_results").select("*").eq("session_id", sid),
       ]);
       const patch: Partial<GameData> = {};
       if (sess.data) patch.session = sess.data as SessionRow;
       if (rounds.data) patch.rounds = rounds.data as RoundRow[];
       if (teams.data) patch.teams = teams.data as TeamRow[];
       if (kpis.data) patch.kpis = kpis.data as KpiSnapshotRow[];
+      if (productResults.data) patch.productResults = productResults.data as ProductRoundResultRow[];
       set(patch);
     }
 

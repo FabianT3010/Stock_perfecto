@@ -24,6 +24,10 @@ panel privado para el facilitador y una vista de proyección para el aula.
 - Cálculo y revelado atómicos: un fallo no deja una ronda publicada a medias y
   un doble clic no la procesa dos veces.
 - Borrador del carrito guardado por equipo y ronda en el dispositivo.
+- Vista unificada de inventario, compras y datos: cada producto muestra precio
+  de venta, costos por proveedor, inventario, llegada exacta e historial.
+- Al revelar, comparación por producto de demanda, unidades vendidas y ventas
+  perdidas, tanto en unidades como en bolivianos.
 - Actualización en tiempo real con sondeo de respaldo y recarga al volver a la
   pestaña.
 - Onboarding breve dentro de la app y materiales imprimibles para operar sin
