@@ -1,5 +1,5 @@
-// SEED del juego v2 "La Tiendita de Doña Peta". Fuente de verdad: PLAN-V2.md §2/§4.
-// Se inserta por sesión al crearla. Números provisionales marcados para calibración.
+// Seed del juego v2 "La Tiendita de Doña Peta". Fuente de verdad: PLAN-V2.md §2/§4.
+// Se inserta por sesión al crearla. Validar cualquier cambio con `npm run calibrate`.
 
 export const CURRENCY = "Bs";
 export const DEFAULT_TOTAL_ROUNDS = 5;

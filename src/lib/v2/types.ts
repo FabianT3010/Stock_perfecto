@@ -23,6 +23,9 @@ export type SessionRow = {
   status: SessionStatus;
   current_round: number;
   total_rounds: number;
+  max_teams: number;
+  registration_open: boolean;
+  default_round_seconds: number;
   starting_cash: number;
   fixed_cost_per_round: number;
   holding_cost_per_unit: number;
@@ -89,7 +92,10 @@ export type RoundRow = {
   event_description: string | null;
   event_icon: string | null;
   supply_config: SupplyConfig | null;
+  duration_seconds: number;
   opened_at: string | null;
+  closes_at: string | null;
+  submission_count: number;
   closed_at: string | null;
   revealed_at: string | null;
 };
@@ -166,8 +172,8 @@ export type CreateSessionBody = {
   name?: string;
   pin?: string;
   totalRounds?: number;
-  /** Nombres de equipos a pre-crear (carteles por mesa). Opcional. */
-  teams?: string[];
+  maxTeams?: number;
+  roundDurationMinutes?: number;
   economics?: {
     startingCash?: number;
     fixedCost?: number;
@@ -177,7 +183,8 @@ export type CreateSessionBody = {
 
 export type JoinBody = {
   code: string;
-  teamName: string;
+  teamName?: string;
+  teamCode?: string;
   members?: string[];
   token?: string;
 };

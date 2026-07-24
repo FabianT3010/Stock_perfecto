@@ -2,7 +2,13 @@
 import "server-only";
 import { clampInt, db, loadSessionByCode, num, verifyTeam } from "./context";
 import { ApiError } from "./http";
-import { generatePin, generateRoomCode, generateToken, randomSeed } from "@/lib/v2/ids";
+import {
+  generatePin,
+  generateRoomCode,
+  generateTeamCode,
+  generateToken,
+  randomSeed,
+} from "@/lib/v2/ids";
 import {
   DEFAULT_TOTAL_ROUNDS,
   ECONOMICS,
@@ -15,75 +21,6 @@ import {
 import { generateDemandPlan, generateHistory } from "@/lib/v2/seed";
 import type { CreateSessionBody, SessionRow } from "@/lib/v2/types";
 
-/** Inserta el inventario heredado (lotes iniciales + movimientos) de un equipo. */
-async function seedTeamInventory(sessionId: string, teamId: string) {
-  const { data: products } = await db()
-    .from("products")
-    .select("id, sku")
-    .eq("session_id", sessionId);
-  const idBySku = new Map((products ?? []).map((p) => [p.sku as string, p.id as string]));
-
-  const lotsPayload = PRODUCTS.filter((p) => p.startingStock > 0)
-    .map((p) => {
-      const productId = idBySku.get(p.sku);
-      if (!productId) return null;
-      return {
-        session_id: sessionId,
-        team_id: teamId,
-        product_id: productId,
-        acquired_round: 0,
-        qty_initial: p.startingStock,
-        qty_remaining: p.startingStock,
-        unit_cost: initialLotCost(p.sku),
-        source: "initial",
-        expires_after_round: p.initialExpiresAfterRound,
-      };
-    })
-    .filter(Boolean) as Record<string, unknown>[];
-
-  if (!lotsPayload.length) return;
-  const { data: lots, error } = await db()
-    .from("inventory_lots")
-    .insert(lotsPayload)
-    .select("id, product_id, qty_initial");
-  if (error) throw new ApiError(500, error.message);
-
-  const movesPayload = (lots ?? []).map((l) => ({
-    session_id: sessionId,
-    team_id: teamId,
-    product_id: l.product_id,
-    lot_id: l.id,
-    round_number: 0,
-    type: "initial",
-    qty: l.qty_initial,
-  }));
-  if (movesPayload.length) await db().from("inventory_moves").insert(movesPayload);
-}
-
-async function createTeam(
-  sessionId: string,
-  name: string,
-  members: string[],
-  startingCash: number,
-) {
-  const { data: team, error } = await db()
-    .from("teams")
-    .insert({ session_id: sessionId, name, member_names: members, cash: startingCash })
-    .select()
-    .single();
-  if (error || !team) {
-    if (error?.code === "23505") throw new ApiError(409, "Ese equipo ya existe.");
-    throw new ApiError(500, error?.message ?? "No se pudo crear el equipo.");
-  }
-  const token = generateToken();
-  const { error: tErr } = await db()
-    .from("team_secrets")
-    .insert({ team_id: team.id, token });
-  if (tErr) throw new ApiError(500, tErr.message);
-  await seedTeamInventory(sessionId, team.id as string);
-  return { teamId: team.id as string, token, name: team.name as string };
-}
-
 // ---------------------------------------------------------------- crear sesión
 export async function createSession(body: CreateSessionBody) {
   const name = (body.name || "La Tiendita de Doña Peta").trim().slice(0, 80);
@@ -91,13 +28,18 @@ export async function createSession(body: CreateSessionBody) {
   if (pin && !/^\d{6}$/.test(pin)) throw new ApiError(400, "El PIN debe tener 6 dígitos.");
   if (!pin) pin = generatePin();
   const totalRounds = clampInt(body.totalRounds ?? DEFAULT_TOTAL_ROUNDS, 1, ROUND_SCRIPTS.length);
+  const maxTeams = clampInt(body.maxTeams ?? 20, 1, 40);
+  const roundDurationSeconds = clampInt(
+    Math.round(num(body.roundDurationMinutes, 6) * 60),
+    30,
+    7200,
+  );
   const seed = randomSeed();
   const eco = {
     startingCash: num(body.economics?.startingCash, ECONOMICS.startingCash),
     fixedCost: num(body.economics?.fixedCost, ECONOMICS.fixedCostPerRound),
     holdingCost: num(body.economics?.holdingCost, ECONOMICS.holdingCostPerUnit),
   };
-
   // código único
   let code = generateRoomCode();
   for (let i = 0; i < 5; i++) {
@@ -114,6 +56,9 @@ export async function createSession(body: CreateSessionBody) {
       status: "lobby",
       current_round: 0,
       total_rounds: totalRounds,
+      max_teams: maxTeams,
+      registration_open: true,
+      default_round_seconds: roundDurationSeconds,
       starting_cash: eco.startingCash,
       fixed_cost_per_round: eco.fixedCost,
       holding_cost_per_unit: eco.holdingCost,
@@ -192,6 +137,7 @@ export async function createSession(body: CreateSessionBody) {
         round_number: rs.roundNumber,
         title: rs.title,
         status: "pending",
+        duration_seconds: roundDurationSeconds,
       })),
     )
     .select("id, round_number");
@@ -240,23 +186,14 @@ export async function createSession(body: CreateSessionBody) {
       })),
     );
 
-  // equipos pre-creados (opcional)
-  const preTeams = (body.teams ?? [])
-    .map((t) => t.trim())
-    .filter((t) => t.length >= 2)
-    .slice(0, 40);
-  const createdTeams = [];
-  for (const teamName of preTeams) {
-    createdTeams.push(await createTeam(sessionId, teamName, [], eco.startingCash));
-  }
-
-  return { session: session as SessionRow, code, pin, teams: createdTeams };
+  return { session: session as SessionRow, code, pin, teams: [] };
 }
 
 // -------------------------------------------------------------- unirse a sala
 export async function joinTeam(
   code: string,
-  teamName: string,
+  teamName: string | undefined,
+  teamCode: string | undefined,
   members: string[] = [],
   token?: string,
 ) {
@@ -281,39 +218,110 @@ export async function joinTeam(
     }
   }
 
-  const name = (teamName || "").trim().slice(0, 30);
-  if (name.length < 2) throw new ApiError(400, "Escribe el nombre de tu equipo (mín. 2 caracteres).");
-
-  // 2) ¿equipo existente por nombre? (pre-creado o ya unido) → se reclama
-  const { data: teamsInSession } = await db()
-    .from("teams")
-    .select("id, name")
-    .eq("session_id", session.id);
-  const existing = (teamsInSession ?? []).find(
-    (t) => (t.name as string).toLowerCase() === name.toLowerCase(),
-  );
-  if (existing) {
-    const { data: sec } = await db()
-      .from("team_secrets")
-      .select("token")
-      .eq("team_id", existing.id)
-      .maybeSingle();
-    if (!sec) throw new ApiError(500, "Equipo sin credencial.");
-    if (members.length) {
-      await db().from("teams").update({ member_names: members }).eq("id", existing.id);
+  // 2) recuperación en otro dispositivo mediante el código privado del equipo.
+  const normalizedTeamCode = (teamCode || "").trim().toUpperCase();
+  if (normalizedTeamCode) {
+    if (!/^[A-HJ-NP-Z2-9]{6}$/.test(normalizedTeamCode)) {
+      throw new ApiError(400, "El código de recuperación tiene 6 caracteres.");
     }
-    return { teamId: existing.id as string, token: sec.token as string, name: existing.name as string, session };
+    const { data: sec, error: secErr } = await db()
+      .from("team_secrets")
+      .select("team_id, token")
+      .eq("join_code", normalizedTeamCode)
+      .maybeSingle();
+    if (secErr) throw new ApiError(500, secErr.message);
+    if (!sec) throw new ApiError(401, "Código de recuperación incorrecto.");
+
+    const { data: existing } = await db()
+      .from("teams")
+      .select("id, name, session_id")
+      .eq("id", sec.team_id)
+      .eq("session_id", session.id)
+      .maybeSingle();
+    if (!existing) throw new ApiError(401, "Ese código no pertenece a esta sala.");
+    return {
+      teamId: existing.id as string,
+      token: sec.token as string,
+      name: existing.name as string,
+      session,
+      created: false,
+    };
   }
 
-  // 3) crear equipo nuevo
-  const created = await createTeam(session.id, name, members, Number(session.starting_cash));
-  return { teamId: created.teamId, token: created.token, name: created.name, session };
+  // 3) alta inicial: una mesa crea su equipo mientras el lobby está abierto.
+  const normalizedName = (teamName || "").trim().replace(/\s+/g, " ").slice(0, 30);
+  if (normalizedName.length < 2) {
+    throw new ApiError(400, "El nombre del equipo debe tener entre 2 y 30 caracteres.");
+  }
+  if (!/^[\p{L}\p{N}][\p{L}\p{N} .&'_-]*$/u.test(normalizedName)) {
+    throw new ApiError(400, "El nombre contiene caracteres no permitidos.");
+  }
+  const cleanMembers = members
+    .map((member) => member.trim().replace(/\s+/g, " ").slice(0, 40))
+    .filter(Boolean)
+    .slice(0, 8);
+  const { data: productRows, error: productError } = await db()
+    .from("products")
+    .select("id, sku")
+    .eq("session_id", session.id);
+  if (productError) throw new ApiError(500, productError.message);
+  const productIdBySku = new Map((productRows ?? []).map((product) => [product.sku as string, product.id as string]));
+  const initialLots = PRODUCTS.flatMap((product) => {
+    const productId = productIdBySku.get(product.sku);
+    if (!productId || product.startingStock <= 0) return [];
+    return [{
+      product_id: productId,
+      qty: product.startingStock,
+      unit_cost: initialLotCost(product.sku),
+      expires_after_round: product.initialExpiresAfterRound,
+    }];
+  });
+
+  const newToken = generateToken();
+  let joinCode = generateTeamCode();
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const { data, error } = await db().rpc("register_game_team", {
+      p_session_id: session.id,
+      p_name: normalizedName,
+      p_member_names: cleanMembers,
+      p_token: newToken,
+      p_join_code: joinCode,
+      p_initial_lots: initialLots,
+    });
+    if (!error && data?.[0]) {
+      return {
+        teamId: data[0].team_id as string,
+        token: newToken,
+        joinCode,
+        name: data[0].team_name as string,
+        session,
+        created: true,
+      };
+    }
+    if (error?.message.includes("teams_session_name_uq")) {
+      throw new ApiError(409, "Ese nombre de equipo ya está registrado.");
+    }
+    if (error?.message.includes("máximo de equipos")) {
+      throw new ApiError(409, "La sala alcanzó el máximo de equipos.");
+    }
+    if (error?.message.includes("inscripciones están cerradas")) {
+      throw new ApiError(409, "Las inscripciones están cerradas.");
+    }
+    if (!error?.message.includes("team_secrets")) {
+      throw new ApiError(500, error?.message ?? "No se pudo crear el equipo.");
+    }
+    joinCode = generateTeamCode();
+  }
+  throw new ApiError(500, "No se pudo generar la credencial del equipo.");
 }
 
 // --------------------------------------------------- estado privado del equipo
 export async function getTeamState(code: string, teamId: string, token: string) {
   const session = await loadSessionByCode(code);
   const team = await verifyTeam(teamId, token);
+  if (team.session_id !== session.id) {
+    throw new ApiError(403, "El equipo no pertenece a esta sala.");
+  }
 
   // ronda abierta actual
   const { data: openRound } = await db()

@@ -14,24 +14,16 @@ import {
 } from "@/components/ui";
 import { saveFacilitatorCreds } from "@/lib/facilitator";
 
-const DEFAULT_TEAMS = [
-  "Los del fondo",
-  "Kiosco Ana",
-  "Tienda Beto",
-  "Almacén Caro",
-  "El Ahorro",
-  "Doña Rosa",
-];
-
 export default function FacilitatorCreatePage() {
   const router = useRouter();
   const [name, setName] = useState("La Tiendita de Doña Peta");
   const [pin, setPin] = useState("");
   const [rounds, setRounds] = useState("5");
-  const [teamsText, setTeamsText] = useState(DEFAULT_TEAMS.join("\n"));
+  const [maxTeams, setMaxTeams] = useState("20");
+  const [roundMinutes, setRoundMinutes] = useState("6");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [created, setCreated] = useState<{ code: string; pin: string; teams: number } | null>(null);
+  const [created, setCreated] = useState<{ code: string; pin: string; maxTeams: number } | null>(null);
   const [existingCode, setExistingCode] = useState("");
 
   async function handleCreate(e: React.FormEvent) {
@@ -39,7 +31,6 @@ export default function FacilitatorCreatePage() {
     setError(null);
     setLoading(true);
     try {
-      const teams = teamsText.split("\n").map((t) => t.trim()).filter(Boolean);
       const res = await fetch("/api/v2/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -47,7 +38,8 @@ export default function FacilitatorCreatePage() {
           name,
           pin: pin.trim() || undefined,
           totalRounds: parseInt(rounds, 10) || 5,
-          teams,
+          maxTeams: parseInt(maxTeams, 10) || 20,
+          roundDurationMinutes: parseFloat(roundMinutes) || 6,
         }),
       });
       const json = await res.json();
@@ -55,7 +47,7 @@ export default function FacilitatorCreatePage() {
         setError(json.error ?? "No se pudo crear la sala.");
       } else {
         saveFacilitatorCreds({ code: json.code, pin: json.pin });
-        setCreated({ code: json.code, pin: json.pin, teams: json.teams?.length ?? 0 });
+        setCreated({ code: json.code, pin: json.pin, maxTeams: json.session.max_teams });
       }
     } catch {
       setError("Error de red al crear la sala.");
@@ -67,7 +59,7 @@ export default function FacilitatorCreatePage() {
   if (created) {
     const joinUrl = typeof window !== "undefined" ? `${window.location.origin}/join?code=${created.code}` : "";
     return (
-      <PageShell title="Sala creada" subtitle="Comparte el código con las mesas.">
+      <PageShell title="Sala creada" subtitle="Proyecta o comparte el enlace para que cada mesa registre su equipo.">
         <div className="mx-auto max-w-lg space-y-4">
           <Card>
             <div className="grid grid-cols-2 gap-4 text-center">
@@ -84,7 +76,8 @@ export default function FacilitatorCreatePage() {
               Enlace para las mesas: {joinUrl}
             </p>
             <Callout tone="warn">
-              Anota el <b>PIN</b> (6 dígitos): lo necesitas para controlar las semanas. Se pre-crearon {created.teams} equipos.
+              Anota el <b>PIN</b> (6 dígitos): lo necesitas para controlar las semanas.
+              Se admitirán hasta {created.maxTeams} equipos.
             </Callout>
           </Card>
           <Button size="lg" className="w-full" onClick={() => router.push(`/facilitator/${created.code}`)}>
@@ -119,19 +112,27 @@ export default function FacilitatorCreatePage() {
               <Field label="Número de semanas">
                 <Input type="number" min={1} max={5} value={rounds} onChange={(e) => setRounds(e.target.value)} />
               </Field>
+              <Field label="Máximo de equipos" hint="Cada mesa registra uno.">
+                <Input type="number" min={1} max={40} value={maxTeams} onChange={(e) => setMaxTeams(e.target.value)} />
+              </Field>
+              <Field label="Minutos por semana" hint="Valor inicial; podrás cambiarlo por ronda.">
+                <Input
+                  type="number"
+                  min={0.5}
+                  max={120}
+                  step={0.5}
+                  value={roundMinutes}
+                  onChange={(e) => setRoundMinutes(e.target.value)}
+                />
+              </Field>
             </div>
           </Card>
 
-          <Card title="Equipos (uno por línea)">
-            <textarea
-              value={teamsText}
-              onChange={(e) => setTeamsText(e.target.value)}
-              rows={6}
-              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-200"
-              placeholder={"Los del fondo\nKiosco Ana\n..."}
-            />
-            <p className="mt-2 text-xs text-slate-400">
-              Se imprimen en el cartel de cada mesa. Los equipos también pueden crearse al entrar con el código.
+          <Card title="Registro de equipos">
+            <p className="text-sm text-slate-600">
+              La sala comienza vacía. Comparte el código o el enlace: un representante
+              de cada mesa elegirá el nombre, registrará a sus integrantes y recibirá
+              una credencial privada de recuperación.
             </p>
           </Card>
 
@@ -158,9 +159,10 @@ export default function FacilitatorCreatePage() {
           </Card>
           <Card title="Cómo funciona">
             <ol className="list-decimal space-y-1 pl-4 text-sm text-slate-600">
-              <li>Comparte el código con las mesas.</li>
+              <li>Comparte el código y espera que las mesas se registren.</li>
+              <li>Revisa los nombres y cierra las inscripciones.</li>
               <li>Abre la semana para recibir pedidos.</li>
-              <li>Cierra cuando todos hayan enviado.</li>
+              <li>Configura el reloj; puedes cambiarlo antes o durante la semana.</li>
               <li>Revela: se calculan ventas, mermas y caja.</li>
               <li>Avanza a la siguiente semana.</li>
             </ol>

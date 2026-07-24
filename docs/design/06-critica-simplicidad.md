@@ -1,6 +1,8 @@
 # Crítica: simplicidad pedagógica (¿lo entiende un chico de 17? ¿cabe en 2 h?)
 
 > Crítica adversarial generada sobre los 5 diseños fuente (anexos 01-05), ANTES de la síntesis.
+> Sus decisiones aceptadas están consolidadas en
+> [`PLAN-V2.md`](../../PLAN-V2.md); no funciona como manual operativo.
 > Las decisiones finales que absorben o descartan cada hallazgo están en PLAN-V2.md.
 
 ## Resumen

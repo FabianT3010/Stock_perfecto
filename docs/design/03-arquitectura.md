@@ -1,5 +1,10 @@
 # ARQUITECTURA TÉCNICA Y MODELO DE DATOS — Stock Perfecto v2 ("La Tienda de Barrio")
 
+> **Documento histórico anterior a la implementación.** El DDL, las rutas y el
+> orden de persistencia de este anexo no son un contrato vigente. Consulta
+> [`supabase/schema.sql`](../../supabase/schema.sql), `src/app/api/v2` y
+> [`PLAN-V2.md`](../../PLAN-V2.md).
+
 Supuestos declarados: taller ~2h, 20 equipos (3–5 chicos, 1 celular por equipo), facilitador + proyector = ~25 clientes concurrentes; stack se mantiene (Next.js 16 / React 19 / Tailwind v4 / Supabase free tier / Vercel); las 5 rondas representan 5 "semanas" de operación de la tienda; moneda Bs.
 
 ---

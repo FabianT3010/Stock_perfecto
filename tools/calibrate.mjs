@@ -154,7 +154,11 @@ function simulate() {
         onhand: (sku) => onhandMap[sku] ?? 0,
         incoming: (sku) => incMap[sku] ?? 0,
       };
-      let desired = STRATEGIES[t.id](ctx);
+      // La app protege una caída técnica en R1 con un pedido conservador automático.
+      let desired =
+        t.id === "fantasma" && r === 1
+          ? STRATEGIES.conservadora(ctx)
+          : STRATEGIES[t.id](ctx);
 
       // materializar a órdenes con costo; aplicar tope de caja (recorte codicioso)
       let priced = desired

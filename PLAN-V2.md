@@ -39,7 +39,7 @@ equipos, donde el inventario, la caja y la reputación **viajan entre rondas**:
 
 | Dimensión | v1 (actual) | v2 (este plan) |
 |---|---|---|
-| Jugador | Individual | **Equipo** (3-5 chicos, 1 celular, pre-creado con cartel por mesa) |
+| Jugador | Individual | **Equipo** (3-5 chicos, 1 celular, autorregistro controlado en el lobby) |
 | Producto | 1 implícito | **6 productos** con costo, precio, vencimiento y rol pedagógico (4 activos en R1) |
 | Compra | "Cuántas unidades preparo" | **Orden multi-producto a 2 proveedores** (lead time vs. hoy-caro) |
 | Inventario | Se resetea cada ronda | **Viaja**: lotes FEFO, vencimientos, en-tránsito, liquidación final |
@@ -54,16 +54,18 @@ equipos, donde el inventario, la caja y la reputación **viajan entre rondas**:
 
 ## 2. Tabla única de parámetros (fuente de verdad)
 
-Todo número de balance sale de aquí. Cambiar algo aquí ⇒ re-correr `tools/sim.py` (§10).
+Todo número de balance sale de aquí. Cambiar algo aquí ⇒ re-correr
+`npm run calibrate`. `tools/sim.py` se conserva como lanzador compatible del
+calibrador canónico `tools/calibrate.mjs`.
 
 | Parámetro | Valor |
 |---|---|
-| Equipos | 20, **pre-creados antes del taller** (cartel por mesa con código de equipo) |
+| Equipos | Hasta 20; un representante por mesa registra nombre e integrantes mientras el lobby está abierto |
 | Rondas | 5 + R0 de exploración · 1 ronda = 1 semana |
-| Decisión | **6 min** con autocierre duro (`closes_at`) + botón "+1 min" (máx. 1 por ronda) |
+| Decisión | **6 min predeterminados**, editables por sala y por ronda antes o durante la apertura; autocierre con `closes_at` |
 | Catálogo | **6 productos** (§4.1) · en R1 solo 4 activos (huevos y detergente entran en R2) |
 | Proveedores | **2** (§4.2): La Principal (lead 1) · Don Lucho (hoy, tope 40 u/producto/semana; **25 en R4**) |
-| Caja inicial | **Bs 800** *(provisional — calibrar con sim)* |
+| Caja inicial | **Bs 800** *(calibrado; ver §4.5)* |
 | Inventario heredado | Refresco 20 · Pan 60 (vence R1) · Leche 12 (vence R1) · Snacks 40 · Huevos 2 maples · Deterg 4 |
 | Costo fijo | **Bs 60/ronda** — si no alcanza la caja, el faltante queda como **deuda** (nunca bloquea jugar) |
 | Almacenaje | Bs 0,20 por unidad remanente al cierre |
@@ -72,7 +74,7 @@ Todo número de balance sale de aquí. Cambiar algo aquí ⇒ re-correr `tools/s
 | Pago | Al pedir (también lo que viaja en camión) |
 | Caja negativa por compras | Imposible: la UI y el servidor bloquean pedidos que exceden la caja |
 | Préstamos / crédito / descuentos por volumen | **NO existen en v2** (pospuesto; única excepción: promo puntual de R2, opcional) |
-| Sin envío a tiempo | R1: pedido conservador automático · R2-R5: **compra 0**, vende lo del estante, ronda marcada "AUTO" |
+| Sin envío a tiempo | R1: pedido conservador automático · R2-R5: **compra 0**, vende lo del estante |
 | Demanda | Guionada + **ruido ±10% horneado UNA vez** al crear la sesión (semilla) · idéntica para los 20 equipos · anuncios en rango vago ("hasta el doble"), nunca el multiplicador exacto |
 | Histórico | 8 semanas, **1 pico marcado** ("la semana del festival del colegio") |
 | **Puntaje** | **Valor de la Tienda = Caja + Liquidación del estante + (Bs 5 × punto de % de servicio promedio) − Deuda** |
@@ -110,7 +112,7 @@ aceptados y absorbidos por este plan:
 | 9 | Timing 120/120 con colchón cero; primera compra en el minuto 29; hojas incontestables en 7 min (simplicidad) | Guion de **106 min + 14 de colchón**; primera compra antes del minuto 20; Hoja del Analista de **2 preguntas** por ronda |
 | 10 | Quiebra indefinida: fijos con caja insuficiente, equipos-zombi (balance) | Fijos impagos = **deuda** que se descuenta del Valor final, nunca bloquea jugar; sin préstamo (Don Lucho sin mínimo ya es la red: se compra de a 1 unidad) |
 | 11 | Robustez de red planificada al FINAL siendo el riesgo #1 (factibilidad) | **F1 del roadmap** (día 1-2), probada con celulares reales de pantalla bloqueada |
-| 12 | Onboarding optimista; nombres libres = riesgo en proyector (simplicidad, factibilidad) | Equipos pre-creados con nombre curado asignado + cartel impreso por mesa; el join es "entrar con el código del cartel" |
+| 12 | Onboarding optimista; nombres libres = riesgo en proyector (simplicidad, factibilidad) | Autorregistro con cupo, unicidad, validación, lista moderable y cierre de inscripciones; cada alta recibe credencial privada de recuperación |
 | 13 | Bottom sheet arrastrable, tómbola, generador de nombres = d-p que no mueven la aguja (factibilidad) | MVP: panel "Ver datos" desplegable simple, proyección estática, sin generador; todo lo teatral lo pone la voz del facilitador |
 | 14 | Merma restada DOS veces en el puntaje UX; mock que no cuadra (367≠379) (balance) | La merma golpea una sola vez (dentro de caja/ganancia); regla de QA: todo número de ejemplo sale de la fórmula final |
 | 15 | Revisar 100 hojas físicas "en 3 min" es imposible (simplicidad) | Premio de proceso = "Mejor Pronóstico" **calculado por la app**; las hojas se premian solo si los asistentes preseleccionan 3 durante R4 |
@@ -244,7 +246,7 @@ mock/pantalla sale de la fórmula final.
 | Reloj | Min | Bloque |
 |---|---|---|
 | 0:00 | 5' | Bienvenida + gancho ("¿fuiste a una tienda y no había? ¿volviste?") |
-| 0:05 | 4' | Ingreso: equipos **pre-creados**, cartel por mesa con código |
+| 0:05 | 4' | Ingreso: un representante por mesa registra el equipo; el facilitador modera y cierra inscripciones |
 | 0:09 | 4' | **Brief de Doña Peta** (proyectado + impreso en mesa) |
 | 0:13 | 6' | **R0**: tour de la app + micro-reto de datos |
 | 0:19 | 11' | **R1** — la primera compra ocurre antes del minuto 20 ✓ |
@@ -295,16 +297,20 @@ Wireframes completos en [anexo 04](./docs/design/04-ux-dashboards.md), con estos
   bien? · ¿Dónde está mi plata? · ¿Cuántas ventas perdí?*) + chips de producto. Línea o
   barras preseleccionado, histórico separado con "← hoy", "Ver tabla" siempre. Panel
   "Ver datos" desplegable simple dentro del Pedido (sin drag). Constructor libre → 2ª edición.
-- **Onboarding:** entrar con el código del cartel de la mesa → confirmar → brief en 3
-  tarjetas → listo (<3 min). Sin campo de texto libre (nombres curados pre-asignados).
-- **Facilitador:** grilla 4×5 con semáforo (✓ enviado · ● editando · ○ quieto · ⚠
-  desconectado), timer con autocierre, demanda editable hasta revelar, **un solo botón
-  primario** de fase, envío manual por equipo (celular muerto → dictan).
+- **Onboarding:** entrar con el código de sala → crear nombre e integrantes → guardar
+  código privado de recuperación → brief en 3 tarjetas → listo (<3 min). El servidor
+  limita cupo, caracteres y nombres duplicados; el facilitador puede quitar equipos
+  antes de R1 y cerrar o reabrir las inscripciones.
+- **Facilitador:** grilla 4×5 con semáforo de envíos, timer con autocierre y tiempo
+  editable antes o durante la ronda, demanda editable hasta revelar y **un solo botón primario**
+  de fase. La carga manual de pedidos no forma parte del MVP: otro dispositivo debe
+  recuperar con el código privado del equipo.
 - **Proyección** (`/proyector`): MVP estático — timer gigante + "enviados 14/20" →
   demanda revelada → ranking. El drama lo pone la voz del facilitador contando desde el
   5º puesto. Animaciones → 2ª edición.
 - **Estados feos** con microcopy exacto (anexo 04 §6), en especial *"Se cortó la señal —
-  tranquilos: su pedido está guardado en este celular. Reconectando…"*.
+  el borrador está guardado en este celular; vuelve a enviarlo al reconectar"*. El
+  carrito local no se presenta como pedido confirmado ni como PWA offline.
 - **Sistema visual:** paleta UPSA con roles estrictos; paleta de series validada contra
   daltonismo (veto al par verde/naranja adyacente); proyector ≥ 32px; targets ≥ 48px.
 
@@ -320,7 +326,8 @@ actual se reutiliza: clientes Supabase, http, ids, tokens, primitivas UI, y los 
   supplier_offers, history_weeks, inventory_lots, inventory_moves, kpi_snapshots`;
   secretas `session_secrets (PIN 6 dígitos + rate limit en BD), team_secrets,
   round_plans (evento + supply_shock jsonb), demand_plan (NOT NULL — demanda vacía
-  imposible), purchase_orders` (secreta ex-ante, publicada como movimientos al revelar).
+  imposible), purchase_orders, order_submissions` (pedido y constancia de envío;
+  secretas ex-ante, publicadas como movimientos al revelar).
   **Sin tablas de préstamos/crédito.** `rounds` gana **`closes_at`** (countdown en cliente,
   autocierre disparado por la pestaña del facilitador al llegar a 0 — sin cron).
   `teams` gana **`debt`** (fijos impagos). Realtime SOLO en
@@ -335,8 +342,10 @@ actual se reutiliza: clientes Supabase, http, ids, tokens, primitivas UI, y los 
   en v1). Histórico: generador con la misma media (analizar la historia SÍ predice).
 - **API:** create (siembra catálogo+ofertas+historia+plan en batch, crea los 20 equipos),
   join-por-código-de-equipo (reconexión por token, sin duplicados), orders (validación
-  caja/cajas/tope, replace-all por ronda), open/close/reveal (idempotente, lock
-  optimista), facilitator/state, kick.
+  caja/cajas/tope, replace-all transaccional por ronda), open/close/extend y reveal.
+  El reveal aplica pedidos, lotes, movimientos, KPIs, caja y estado final en una sola
+  transacción SQL; el estado `revealed` se publica al final. Incluye
+  facilitator/state y kick.
 - **Defectos v1 corregidos como requisitos:** reconexión Realtime + polling de respaldo
   12s + refetch en `visibilitychange`/`online` (**F1, primero**); PIN 6 dígitos con
   bloqueo; sin duplicados; demanda vacía imposible; tormenta de reveal resuelta.
@@ -351,9 +360,9 @@ actual se reutiliza: clientes Supabase, http, ids, tokens, primitivas UI, y los 
 | Fase | Contenido | d-p |
 |---|---|---|
 | **F1** | **Hook de datos robusto**: reconexión + polling respaldo + visibilitychange — probado con 3 celulares reales bloqueando pantalla | 1,5 |
-| **F2** | Schema v2 reducido + seed (catálogo, ofertas, historia, guion) + `tools/sim.py` adaptado a 6 productos y **calibración** (§4.5) | 1,5 |
+| **F2** | Schema v2 reducido + seed (catálogo, ofertas, historia, guion) + calibrador canónico `tools/calibrate.mjs` y lanzador `tools/sim.py` | 1,5 |
 | **F3** | `engine.ts` FEFO + ≥12 tests vitest (incl. estrategias de ataque) | 2,0 |
-| **F4** | `store/` + API v2 + rate-limit PIN + equipos pre-creados | 2,0 |
+| **F4** | `store/` + API v2 + rate-limit PIN + autorregistro transaccional de equipos | 2,0 |
 | **F5** | UI equipo: 5 pestañas + trazabilidad + 4 presets de gráficos | 2,5 |
 | **F6** | Panel facilitador + proyector estático | 1,5 |
 | **F7** | **Ensayo general** (20 pestañas + celulares reales) + regenerar Hojas del Analista con números finales + guía del facilitador | 1,0 |
@@ -375,7 +384,7 @@ cargadores · el panel del facilitador se recupera desde cualquier dispositivo c
 
 | Riesgo | Mitigación |
 |---|---|
-| Wifi de aula + 20 celulares | F1 primero + carrito en localStorage + envío manual + estados "sin conexión" diseñados |
+| Wifi de aula + 20 celulares | F1 primero + borrador en localStorage + reconexión desde otro dispositivo con código privado + estados "sin conexión" diseñados |
 | No cabe en 2 h | 106'+14' de colchón, autocierre duro, primera compra < min 20, recortes estándar definidos |
 | Economía descalibrada / exploit no visto | sim con estrategias de ataque + criterio de aceptación (§4.5) |
 | Supabase free tier pausado | Checklist D-1 |
@@ -386,9 +395,16 @@ cargadores · el panel del facilitador se recupera desde cualquier dispositivo c
 
 ## 10. Pendientes, preguntas y 2ª edición
 
-**Calibración (F2/F7, obligatoria):** re-correr `tools/sim.py` sobre el catálogo de 6 con
-la fórmula de §2; fijar caja inicial, umbral del premio de servicio y precios finales;
-regenerar Hojas del Analista y mocks con esos números.
+**Calibración completada:** `npm run calibrate` usa el catálogo de seis productos,
+la fórmula de §2 y estrategias analítica, agresiva, conservadora, fantasma,
+JIT-Lucho y máximo servicio. El criterio automático exige que la estrategia
+analítica gane y que el fantasma termine último. Caja inicial y precios quedan
+fijados por la tabla de §2. Si cambia cualquier parámetro, la calibración, las
+pruebas y los materiales deben regenerarse.
+
+**Límite del MVP actual:** la aplicación publica el ranking principal con sus
+desempates. Los premios secundarios de pronóstico, servicio y badges descritos en
+§4.5 siguen siendo una propuesta de facilitación y todavía no se calculan en la UI.
 
 **Preguntas al dueño del proyecto (no bloquean F1-F4):**
 - ¿Fecha del evento? (12 d-p de MVP → define margen para la 2ª edición)

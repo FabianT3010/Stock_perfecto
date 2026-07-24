@@ -6,7 +6,7 @@ import {
   HISTORY_WEEKS,
   PRODUCTS,
   ROUND_SCRIPTS,
-} from "./constants";
+} from "./constants.ts";
 
 /** PRNG mulberry32: determinista y rápido. */
 export function mulberry32(seed: number): () => number {

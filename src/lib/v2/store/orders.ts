@@ -93,11 +93,16 @@ export async function submitOrders(
     throw new ApiError(409, `No te alcanza la caja: el pedido cuesta Bs ${total} y tienes Bs ${team.cash}.`);
   }
 
-  // replace-all de la ronda: borra lo anterior y reinserta
-  await db().from("purchase_orders").delete().eq("team_id", teamId).eq("round_id", roundId);
-  if (rows.length) {
-    const { error } = await db().from("purchase_orders").insert(rows);
-    if (error) throw new ApiError(500, error.message);
+  // Reemplazo + marca de envío en UNA transacción. También registra compra 0.
+  const { error } = await db().rpc("replace_team_orders", {
+    p_session_id: session.id,
+    p_team_id: teamId,
+    p_round_id: roundId,
+    p_orders: rows,
+  });
+  if (error) {
+    const conflict = /ya no acepta|ronda/i.test(error.message);
+    throw new ApiError(conflict ? 409 : 500, error.message);
   }
 
   return { ok: true, lines: rows.length, totalCost: total, availableCash: round2(Number(team.cash) - total) };

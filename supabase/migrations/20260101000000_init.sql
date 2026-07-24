@@ -6,13 +6,14 @@
 --     sessions, rounds, teams, products, suppliers, supplier_offers,
 --     history_weeks, inventory_lots, inventory_moves, kpi_snapshots
 --   SECRETAS (sin políticas anon + revoke; solo service_role):
---     session_secrets, team_secrets, round_plans, demand_plan, purchase_orders
+--     session_secrets, team_secrets, round_plans, demand_plan, purchase_orders,
+--     order_submissions
 --   Regla anti-trampa: nada que revele el futuro (demanda, eventos no abiertos,
 --   pedidos ajenos de la ronda en curso) vive en tabla pública. Los pedidos se
 --   publican como movimientos de inventario al revelar (secreto ex-ante).
 --
 -- Fuente de verdad de números y reglas: PLAN-V2.md §2/§4. Ejecutar completo en
--- el SQL Editor de Supabase (idempotente).
+-- el SQL Editor de Supabase para una instalación nueva de v2.
 -- ============================================================================
 create extension if not exists pgcrypto;
 
@@ -26,6 +27,9 @@ create table if not exists public.sessions (
                           check (status in ('lobby','running','finished')),
   current_round         integer not null default 0,
   total_rounds          integer not null default 5,
+  max_teams             integer not null default 20 check (max_teams between 1 and 40),
+  registration_open     boolean not null default true,
+  default_round_seconds integer not null default 360 check (default_round_seconds between 30 and 7200),
   starting_cash         numeric not null default 800,
   fixed_cost_per_round  numeric not null default 60,
   holding_cost_per_unit numeric not null default 0.20,
@@ -34,6 +38,9 @@ create table if not exists public.sessions (
   history_seed          integer not null default 0,
   created_at            timestamptz not null default now()
 );
+alter table public.sessions add column if not exists max_teams integer not null default 20;
+alter table public.sessions add column if not exists registration_open boolean not null default true;
+alter table public.sessions add column if not exists default_round_seconds integer not null default 360;
 
 create table if not exists public.session_secrets (       -- SECRETA
   session_id          uuid primary key references public.sessions(id) on delete cascade,
@@ -103,8 +110,17 @@ create unique index if not exists teams_session_name_uq
 
 create table if not exists public.team_secrets (          -- SECRETA
   team_id uuid primary key references public.teams(id) on delete cascade,
-  token   text not null unique
+  token   text not null unique,
+  join_code text not null unique                           -- código impreso en una sola mesa
 );
+
+-- Compatibilidad al aplicar v2 sobre una base creada con una revisión anterior.
+alter table public.team_secrets add column if not exists join_code text;
+update public.team_secrets
+set join_code = upper(substr(translate(replace(gen_random_uuid()::text, '-', ''), '01', '23'), 1, 6))
+where join_code is null;
+alter table public.team_secrets alter column join_code set not null;
+create unique index if not exists team_secrets_join_code_uq on public.team_secrets(join_code);
 
 -- ----------------------------------------------------------------- rounds (PUB)
 create table if not exists public.rounds (
@@ -118,12 +134,18 @@ create table if not exists public.rounds (
   event_description text,
   event_icon        text,
   supply_config     jsonb,                         -- {luchoCap, principalAvailable, deliveryFactor}
+  duration_seconds  integer not null default 360 check (duration_seconds between 30 and 7200),
   opened_at         timestamptz,
+  closes_at         timestamptz,                   -- reloj autoritativo de la ronda
+  submission_count  integer not null default 0,
   closed_at         timestamptz,
   revealed_at       timestamptz,
   unique (session_id, round_number)
 );
 create index if not exists rounds_session_idx on public.rounds(session_id);
+alter table public.rounds add column if not exists closes_at timestamptz;
+alter table public.rounds add column if not exists duration_seconds integer not null default 360;
+alter table public.rounds add column if not exists submission_count integer not null default 0;
 
 create table if not exists public.round_plans (            -- SECRETA
   round_id          uuid primary key references public.rounds(id) on delete cascade,
@@ -159,6 +181,7 @@ create table if not exists public.purchase_orders (
   total_cost       numeric not null,
   lead_time_rounds integer not null,
   arrives_round    integer not null,
+  is_auto          boolean not null default false,
   status           text not null default 'pending'
                      check (status in ('pending','delivered','cancelled')),
   created_at       timestamptz not null default now(),
@@ -167,6 +190,17 @@ create table if not exists public.purchase_orders (
 create index if not exists po_round_idx   on public.purchase_orders(round_id);
 create index if not exists po_team_idx    on public.purchase_orders(team_id);
 create index if not exists po_arrival_idx on public.purchase_orders(session_id, arrives_round, status);
+alter table public.purchase_orders add column if not exists is_auto boolean not null default false;
+
+-- Una cabecera separada permite distinguir "envié compra 0" de "no envié".
+create table if not exists public.order_submissions (       -- SECRETA
+  session_id  uuid not null references public.sessions(id) on delete cascade,
+  team_id     uuid not null references public.teams(id) on delete cascade,
+  round_id    uuid not null references public.rounds(id) on delete cascade,
+  submitted_at timestamptz not null default now(),
+  primary key (team_id, round_id)
+);
+create index if not exists submissions_round_idx on public.order_submissions(round_id);
 
 -- ----------------------------------------------------------- inventory_lots (PUB)
 create table if not exists public.inventory_lots (
@@ -185,6 +219,8 @@ create table if not exists public.inventory_lots (
 );
 create index if not exists lots_team_idx on public.inventory_lots(team_id, product_id);
 create index if not exists lots_session_idx on public.inventory_lots(session_id);
+create unique index if not exists lots_order_uq
+  on public.inventory_lots(order_id) where order_id is not null;
 
 -- ---------------------------------------------------------- inventory_moves (PUB)
 create table if not exists public.inventory_moves (
@@ -264,6 +300,7 @@ alter table public.rounds           enable row level security;
 alter table public.round_plans      enable row level security;
 alter table public.demand_plan      enable row level security;
 alter table public.purchase_orders  enable row level security;
+alter table public.order_submissions enable row level security;
 alter table public.inventory_lots   enable row level security;
 alter table public.inventory_moves  enable row level security;
 alter table public.kpi_snapshots    enable row level security;
@@ -288,9 +325,487 @@ revoke all on public.team_secrets     from anon, authenticated;
 revoke all on public.round_plans      from anon, authenticated;
 revoke all on public.demand_plan      from anon, authenticated;
 revoke all on public.purchase_orders  from anon, authenticated;
+revoke all on public.order_submissions from anon, authenticated;
 
 grant all on all tables in schema public to service_role;
 grant all on all sequences in schema public to service_role;
+
+-- ============================================================================
+-- Operaciones atómicas del flujo crítico
+-- ============================================================================
+
+create or replace function public.replace_team_orders(
+  p_session_id uuid,
+  p_team_id uuid,
+  p_round_id uuid,
+  p_orders jsonb
+) returns void
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_team_session uuid;
+  v_round_session uuid;
+  v_round_status text;
+begin
+  select session_id into v_team_session
+  from public.teams
+  where id = p_team_id
+  for update;
+
+  select session_id, status into v_round_session, v_round_status
+  from public.rounds
+  where id = p_round_id
+  for share;
+
+  if v_team_session is distinct from p_session_id
+     or v_round_session is distinct from p_session_id then
+    raise exception 'Equipo o ronda fuera de la sesión';
+  end if;
+  if v_round_status is distinct from 'open' then
+    raise exception 'La ronda ya no acepta pedidos';
+  end if;
+
+  delete from public.purchase_orders
+  where team_id = p_team_id and round_id = p_round_id;
+
+  insert into public.purchase_orders (
+    session_id, team_id, round_id, placed_round, offer_id, supplier_id,
+    product_id, qty, unit_cost, total_cost, lead_time_rounds, arrives_round, status
+  )
+  select
+    p_session_id, p_team_id, p_round_id, x.placed_round, x.offer_id,
+    x.supplier_id, x.product_id, x.qty, x.unit_cost, x.total_cost,
+    x.lead_time_rounds, x.arrives_round, 'pending'
+  from jsonb_to_recordset(coalesce(p_orders, '[]'::jsonb)) as x(
+    placed_round integer,
+    offer_id uuid,
+    supplier_id uuid,
+    product_id uuid,
+    qty integer,
+    unit_cost numeric,
+    total_cost numeric,
+    lead_time_rounds integer,
+    arrives_round integer
+  );
+
+  insert into public.order_submissions(session_id, team_id, round_id, submitted_at)
+  values (p_session_id, p_team_id, p_round_id, now())
+  on conflict (team_id, round_id)
+  do update set submitted_at = excluded.submitted_at;
+
+  update public.rounds
+  set submission_count = (
+    select count(*) from public.order_submissions where round_id = p_round_id
+  )
+  where id = p_round_id;
+end;
+$$;
+
+create or replace function public.register_game_team(
+  p_session_id uuid,
+  p_name text,
+  p_member_names text[],
+  p_token text,
+  p_join_code text,
+  p_initial_lots jsonb
+) returns table(team_id uuid, team_name text)
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_session public.sessions%rowtype;
+  v_team_id uuid;
+begin
+  select * into v_session
+  from public.sessions
+  where id = p_session_id
+  for update;
+
+  if v_session.id is null then raise exception 'Sala no encontrada'; end if;
+  if v_session.status <> 'lobby' or not v_session.registration_open then
+    raise exception 'Las inscripciones están cerradas';
+  end if;
+  if (select count(*) from public.teams where session_id = p_session_id) >= v_session.max_teams then
+    raise exception 'La sala alcanzó el máximo de equipos';
+  end if;
+
+  insert into public.teams(session_id, name, member_names, cash)
+  values (
+    p_session_id,
+    p_name,
+    coalesce(p_member_names, array[]::text[]),
+    v_session.starting_cash
+  )
+  returning id into v_team_id;
+
+  insert into public.team_secrets(team_id, token, join_code)
+  values (v_team_id, p_token, p_join_code);
+
+  with new_lots as (
+    insert into public.inventory_lots (
+      session_id, team_id, product_id, acquired_round, qty_initial,
+      qty_remaining, unit_cost, source, expires_after_round
+    )
+    select
+      p_session_id, v_team_id, x.product_id, 0, x.qty, x.qty,
+      x.unit_cost, 'initial', x.expires_after_round
+    from jsonb_to_recordset(coalesce(p_initial_lots, '[]'::jsonb)) as x(
+      product_id uuid,
+      qty integer,
+      unit_cost numeric,
+      expires_after_round integer
+    )
+    where x.qty > 0
+      and exists (
+        select 1 from public.products p
+        where p.id = x.product_id and p.session_id = p_session_id
+      )
+    returning id, product_id, qty_initial
+  )
+  insert into public.inventory_moves (
+    session_id, team_id, product_id, lot_id, round_number, type, qty
+  )
+  select p_session_id, v_team_id, product_id, id, 0, 'initial', qty_initial
+  from new_lots;
+
+  return query
+  select v_team_id, p_name;
+end;
+$$;
+
+create or replace function public.open_game_round(
+  p_session_id uuid,
+  p_round_number integer,
+  p_duration_seconds integer default null
+) returns void
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_round public.rounds%rowtype;
+  v_plan public.round_plans%rowtype;
+begin
+  perform 1 from public.sessions where id = p_session_id for update;
+  select * into v_round
+  from public.rounds
+  where session_id = p_session_id and round_number = p_round_number
+  for update;
+
+  if v_round.id is null then raise exception 'Ronda no encontrada'; end if;
+  if v_round.status <> 'pending' then raise exception 'La ronda no está pendiente'; end if;
+  if not exists (select 1 from public.teams where session_id = p_session_id) then
+    raise exception 'Registra al menos un equipo antes de abrir la primera ronda';
+  end if;
+  if exists (
+    select 1 from public.rounds
+    where session_id = p_session_id and status in ('open', 'closed')
+  ) then
+    raise exception 'Hay otra ronda sin revelar';
+  end if;
+  if p_round_number > 1 and not exists (
+    select 1 from public.rounds
+    where session_id = p_session_id
+      and round_number = p_round_number - 1
+      and status = 'revealed'
+  ) then
+    raise exception 'Primero revela la ronda anterior';
+  end if;
+
+  select * into v_plan from public.round_plans where round_id = v_round.id;
+  if v_plan.round_id is null then raise exception 'Ronda sin plan'; end if;
+
+  update public.rounds
+  set status = 'open',
+      opened_at = now(),
+      closes_at = now() + make_interval(
+        secs => greatest(30, least(coalesce(p_duration_seconds, v_round.duration_seconds), 7200))
+      ),
+      submission_count = 0,
+      closed_at = null,
+      event_headline = v_plan.event_headline,
+      event_description = v_plan.event_description,
+      event_icon = v_plan.event_icon,
+      supply_config = v_plan.supply_config
+  where id = v_round.id;
+
+  update public.sessions
+  set status = 'running',
+      current_round = p_round_number,
+      registration_open = false
+  where id = p_session_id;
+end;
+$$;
+
+create or replace function public.close_game_round(
+  p_session_id uuid,
+  p_round_number integer
+) returns void
+language plpgsql
+set search_path = ''
+as $$
+begin
+  update public.rounds
+  set status = 'closed', closed_at = now(), closes_at = null
+  where session_id = p_session_id
+    and round_number = p_round_number
+    and status = 'open';
+  if not found then raise exception 'Solo se puede cerrar la ronda abierta'; end if;
+end;
+$$;
+
+drop function if exists public.extend_game_round(uuid, integer, integer);
+
+create or replace function public.set_game_round_time(
+  p_session_id uuid,
+  p_round_number integer,
+  p_seconds integer
+) returns void
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_status text;
+begin
+  if p_seconds < 30 or p_seconds > 7200 then
+    raise exception 'El tiempo debe estar entre 30 segundos y 120 minutos';
+  end if;
+
+  select status into v_status
+  from public.rounds
+  where session_id = p_session_id and round_number = p_round_number
+  for update;
+
+  if v_status = 'pending' then
+    update public.rounds
+    set duration_seconds = p_seconds
+    where session_id = p_session_id and round_number = p_round_number;
+  elsif v_status = 'open' then
+    update public.rounds
+    set duration_seconds = p_seconds,
+        closes_at = now() + make_interval(secs => p_seconds)
+    where session_id = p_session_id and round_number = p_round_number;
+  else
+    raise exception 'Solo puedes editar el tiempo antes o durante una ronda abierta';
+  end if;
+end;
+$$;
+
+drop function if exists public.apply_round_result(
+  uuid, uuid, integer, jsonb, jsonb, jsonb, jsonb, jsonb, boolean
+);
+
+create or replace function public.apply_round_result(
+  p_session_id uuid,
+  p_round_id uuid,
+  p_round_number integer,
+  p_auto_orders jsonb,
+  p_new_lots jsonb,
+  p_lot_patches jsonb,
+  p_moves jsonb,
+  p_delivered_order_ids jsonb,
+  p_kpis jsonb,
+  p_finish boolean
+) returns void
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_status text;
+begin
+  select status into v_status
+  from public.rounds
+  where id = p_round_id
+    and session_id = p_session_id
+    and round_number = p_round_number
+  for update;
+  if v_status is distinct from 'closed' then
+    raise exception 'La ronda no está cerrada o ya fue revelada';
+  end if;
+
+  insert into public.purchase_orders (
+    id, session_id, team_id, round_id, placed_round, offer_id, supplier_id,
+    product_id, qty, unit_cost, total_cost, lead_time_rounds, arrives_round,
+    is_auto, status
+  )
+  select
+    x.id, p_session_id, x.team_id, p_round_id, p_round_number, x.offer_id,
+    x.supplier_id, x.product_id, x.qty, x.unit_cost, x.total_cost,
+    x.lead_time_rounds, x.arrives_round, true, 'pending'
+  from jsonb_to_recordset(coalesce(p_auto_orders, '[]'::jsonb)) as x(
+    id uuid,
+    team_id uuid,
+    offer_id uuid,
+    supplier_id uuid,
+    product_id uuid,
+    qty integer,
+    unit_cost numeric,
+    total_cost numeric,
+    lead_time_rounds integer,
+    arrives_round integer
+  );
+
+  insert into public.inventory_lots (
+    session_id, team_id, product_id, acquired_round, qty_initial,
+    qty_remaining, unit_cost, source, order_id, expires_after_round
+  )
+  select
+    p_session_id, x.team_id, x.product_id, x.acquired_round, x.qty_initial,
+    x.qty_remaining, x.unit_cost, 'order', x.order_id, x.expires_after_round
+  from jsonb_to_recordset(coalesce(p_new_lots, '[]'::jsonb)) as x(
+    team_id uuid,
+    product_id uuid,
+    acquired_round integer,
+    qty_initial integer,
+    qty_remaining integer,
+    unit_cost numeric,
+    order_id uuid,
+    expires_after_round integer
+  );
+
+  update public.inventory_lots l
+  set qty_remaining = x.qty_remaining
+  from jsonb_to_recordset(coalesce(p_lot_patches, '[]'::jsonb)) as x(
+    lot_id uuid,
+    qty_remaining integer
+  )
+  where l.id = x.lot_id and l.session_id = p_session_id;
+
+  insert into public.inventory_moves (
+    session_id, team_id, product_id, lot_id, round_number, type, qty
+  )
+  select
+    p_session_id, x.team_id, x.product_id,
+    coalesce(
+      x.lot_id,
+      (select l.id from public.inventory_lots l where l.order_id = x.order_id)
+    ),
+    p_round_number, x.type, x.qty
+  from jsonb_to_recordset(coalesce(p_moves, '[]'::jsonb)) as x(
+    team_id uuid,
+    product_id uuid,
+    lot_id uuid,
+    order_id uuid,
+    type text,
+    qty integer
+  );
+
+  update public.purchase_orders
+  set status = 'delivered'
+  where session_id = p_session_id
+    and id in (
+      select value::uuid
+      from jsonb_array_elements_text(coalesce(p_delivered_order_ids, '[]'::jsonb))
+    );
+
+  insert into public.kpi_snapshots (
+    session_id, team_id, round_id, round_number, revenue, purchases_cash_out,
+    purchases_refund, cogs, holding_cost, fixed_cost, spoilage_units,
+    spoilage_cost, demand_total, units_sold, lost_sales, service_level,
+    avg_service_level, sell_through, stock_end_units, stock_end_value,
+    cash_start, cash_end, debt, profit_round, profit_cumulative,
+    score_round, score_total
+  )
+  select
+    p_session_id, x.team_id, p_round_id, p_round_number, x.revenue,
+    x.purchases_cash_out, x.purchases_refund, x.cogs, x.holding_cost,
+    x.fixed_cost, x.spoilage_units, x.spoilage_cost, x.demand_total,
+    x.units_sold, x.lost_sales, x.service_level, x.avg_service_level,
+    x.sell_through, x.stock_end_units, x.stock_end_value, x.cash_start,
+    x.cash_end, x.debt, x.profit_round, x.profit_cumulative,
+    x.score_round, x.score_total
+  from jsonb_to_recordset(coalesce(p_kpis, '[]'::jsonb)) as x(
+    team_id uuid,
+    revenue numeric,
+    purchases_cash_out numeric,
+    purchases_refund numeric,
+    cogs numeric,
+    holding_cost numeric,
+    fixed_cost numeric,
+    spoilage_units integer,
+    spoilage_cost numeric,
+    demand_total integer,
+    units_sold integer,
+    lost_sales integer,
+    service_level numeric,
+    avg_service_level numeric,
+    sell_through numeric,
+    stock_end_units integer,
+    stock_end_value numeric,
+    cash_start numeric,
+    cash_end numeric,
+    debt numeric,
+    profit_round numeric,
+    profit_cumulative numeric,
+    score_round numeric,
+    score_total numeric,
+    service_sum numeric,
+    rounds_played integer
+  )
+  on conflict (team_id, round_id) do update set
+    revenue = excluded.revenue,
+    purchases_cash_out = excluded.purchases_cash_out,
+    purchases_refund = excluded.purchases_refund,
+    cogs = excluded.cogs,
+    holding_cost = excluded.holding_cost,
+    fixed_cost = excluded.fixed_cost,
+    spoilage_units = excluded.spoilage_units,
+    spoilage_cost = excluded.spoilage_cost,
+    demand_total = excluded.demand_total,
+    units_sold = excluded.units_sold,
+    lost_sales = excluded.lost_sales,
+    service_level = excluded.service_level,
+    avg_service_level = excluded.avg_service_level,
+    sell_through = excluded.sell_through,
+    stock_end_units = excluded.stock_end_units,
+    stock_end_value = excluded.stock_end_value,
+    cash_start = excluded.cash_start,
+    cash_end = excluded.cash_end,
+    debt = excluded.debt,
+    profit_round = excluded.profit_round,
+    profit_cumulative = excluded.profit_cumulative,
+    score_round = excluded.score_round,
+    score_total = excluded.score_total;
+
+  update public.teams t
+  set cash = x.cash_end,
+      debt = x.debt,
+      score_total = x.score_total,
+      service_sum = x.service_sum,
+      rounds_played = x.rounds_played
+  from jsonb_to_recordset(coalesce(p_kpis, '[]'::jsonb)) as x(
+    team_id uuid,
+    cash_end numeric,
+    debt numeric,
+    score_total numeric,
+    service_sum numeric,
+    rounds_played integer
+  )
+  where t.id = x.team_id and t.session_id = p_session_id;
+
+  if p_finish then
+    update public.sessions set status = 'finished' where id = p_session_id;
+  end if;
+
+  -- Última escritura: los clientes solo observan "revealed" con datos completos.
+  update public.rounds
+  set status = 'revealed', revealed_at = now(), closes_at = null
+  where id = p_round_id;
+end;
+$$;
+
+revoke all on function public.replace_team_orders(uuid, uuid, uuid, jsonb) from public, anon, authenticated;
+revoke all on function public.register_game_team(uuid, text, text[], text, text, jsonb) from public, anon, authenticated;
+revoke all on function public.open_game_round(uuid, integer, integer) from public, anon, authenticated;
+revoke all on function public.close_game_round(uuid, integer) from public, anon, authenticated;
+revoke all on function public.set_game_round_time(uuid, integer, integer) from public, anon, authenticated;
+revoke all on function public.apply_round_result(uuid, uuid, integer, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, boolean) from public, anon, authenticated;
+grant execute on function public.replace_team_orders(uuid, uuid, uuid, jsonb) to service_role;
+grant execute on function public.register_game_team(uuid, text, text[], text, text, jsonb) to service_role;
+grant execute on function public.open_game_round(uuid, integer, integer) to service_role;
+grant execute on function public.close_game_round(uuid, integer) to service_role;
+grant execute on function public.set_game_round_time(uuid, integer, integer) to service_role;
+grant execute on function public.apply_round_result(uuid, uuid, integer, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, boolean) to service_role;
 
 -- ============================================================================
 -- Realtime: SOLO las públicas que cambian durante el juego.

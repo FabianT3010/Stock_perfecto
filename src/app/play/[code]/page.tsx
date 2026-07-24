@@ -1,6 +1,13 @@
 "use client";
 
-import { use, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  use,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
@@ -21,7 +28,7 @@ import {
   latestKpi,
   rankTeams,
 } from "@/lib/v2/derive";
-import { readTeam, type TeamIdentity } from "@/lib/v2/team";
+import { teamStorageKey, type TeamIdentity } from "@/lib/v2/team";
 import { money, int, percent } from "@/lib/format";
 import type { RoundRow, SupplyConfig } from "@/lib/v2/types";
 
@@ -47,12 +54,34 @@ const STATUS_LABEL: Record<string, string> = {
   revealed: "Revelada",
 };
 
+const ROUND_QUESTIONS: Record<number, string> = {
+  1: "Según el cuaderno, ¿cuánto se vende normalmente y qué rango ves?",
+  2: "¿Qué necesitas hoy y qué debe llegar la próxima semana para la kermesse?",
+  3: "¿Qué productos pueden quebrarse aunque uses el rescate caro de Don Lucho?",
+  4: "Con medio camión, ¿qué colchón te protege sin inmovilizar demasiada caja?",
+  5: "¿Qué conviene vender y qué stock no quieres dejarle a Doña Peta?",
+};
+
 function TeamGame({ code }: { code: string }) {
-  const [identity, setIdentity] = useState<TeamIdentity | null | "loading">("loading");
-  useEffect(() => setIdentity(readTeam(code)), [code]);
+  const storedIdentity = useSyncExternalStore(
+    (onChange) => {
+      window.addEventListener("storage", onChange);
+      return () => window.removeEventListener("storage", onChange);
+    },
+    () => window.localStorage.getItem(teamStorageKey(code)),
+    () => null,
+  );
+  const identity = useMemo(() => {
+    if (!storedIdentity) return null;
+    try {
+      return JSON.parse(storedIdentity) as TeamIdentity;
+    } catch {
+      return null;
+    }
+  }, [storedIdentity]);
   const data = useGameData(code);
 
-  if (identity === "loading" || data.loading) {
+  if (data.loading) {
     return (
       <main className="flex min-h-[70vh] items-center justify-center">
         <Spinner className="h-6 w-6 text-slate-400" />
@@ -126,7 +155,7 @@ function Board({
   }, [code, identity.teamId, identity.token]);
 
   useEffect(() => {
-    refreshTeamState();
+    queueMicrotask(refreshTeamState);
   }, [refreshTeamState, round?.id, round?.status]);
 
   const myTeam = data.teams.find((t) => t.id === identity.teamId);
@@ -164,6 +193,8 @@ function Board({
         <RoundBanner round={round} weekLabel={weekLabel} status={session!.status} />
       </div>
 
+      {session!.status === "lobby" && <OnboardingBrief />}
+
       {/* pestañas */}
       <nav className="mb-5 flex gap-1 overflow-x-auto rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
         {(["inicio", "tienda", "pedido", "datos", "podio"] as Tab[]).map((t) => (
@@ -185,14 +216,19 @@ function Board({
       {tab === "inicio" && <InicioTab data={data} identity={identity} last={last} round={round} onGoPedido={() => setTab("pedido")} />}
       {tab === "tienda" && <TiendaTab data={data} identity={identity} />}
       {tab === "pedido" && (
-        <PedidoTab
-          code={code}
-          identity={identity}
-          data={data}
-          round={round}
-          teamState={teamState}
-          onSubmitted={refreshTeamState}
-        />
+        isOpen && teamState?.openRound?.id !== round?.id
+          ? <div className="flex h-40 items-center justify-center"><Spinner className="h-6 w-6 text-slate-400" /></div>
+          : (
+            <PedidoTab
+              key={round?.id ?? "no-round"}
+              code={code}
+              identity={identity}
+              data={data}
+              round={round}
+              teamState={teamState}
+              onSubmitted={refreshTeamState}
+            />
+          )
       )}
       {tab === "datos" && <DataTab data={data} teamId={identity.teamId} />}
       {tab === "podio" && <PodioTab ranking={ranking} meId={identity.teamId} finished={session!.status === "finished"} />}
@@ -221,6 +257,7 @@ function RoundBanner({
   weekLabel: string;
   status: string;
 }) {
+  const remaining = useCountdown(round?.status === "open" ? round.closes_at : null);
   if (status === "lobby" || !round) {
     return (
       <Card>
@@ -236,7 +273,14 @@ function RoundBanner({
         <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
           {weekLabel} · {round.title}
         </div>
-        <Badge tone={round.status}>{STATUS_LABEL[round.status]}</Badge>
+        <div className="text-right">
+          <Badge tone={round.status}>{STATUS_LABEL[round.status]}</Badge>
+          {round.status === "open" && (
+            <div className="mt-1 font-mono text-xl font-black tabular-nums text-brand-800">
+              {formatCountdown(remaining)}
+            </div>
+          )}
+        </div>
       </div>
       {round.event_headline && (
         <div className="mt-2">
@@ -247,6 +291,31 @@ function RoundBanner({
         </div>
       )}
     </Card>
+  );
+}
+
+function OnboardingBrief() {
+  return (
+    <div className="mb-5">
+      <Card title="R0 · Conoce la tienda antes de decidir">
+        <div className="grid gap-2 sm:grid-cols-3">
+          <div className="rounded-md bg-slate-50 p-3 text-sm text-slate-700">
+            <b>1. Misión</b><br />Cuiden durante cinco semanas la tienda de Doña Peta.
+          </div>
+          <div className="rounded-md bg-slate-50 p-3 text-sm text-slate-700">
+            <b>2. Decisión</b><br />Elijan qué comprar, cuánto y a cuál proveedor.
+          </div>
+          <div className="rounded-md bg-slate-50 p-3 text-sm text-slate-700">
+            <b>3. Regla</b><br />La caja, el inventario y la deuda viajan entre semanas.
+          </div>
+        </div>
+        <div className="mt-3">
+          <Callout tone="info">
+            Micro-reto: abre <b>Datos</b> y estima el promedio semanal de refresco antes de la semana 1.
+          </Callout>
+        </div>
+      </Card>
+    </div>
   );
 }
 
@@ -378,18 +447,21 @@ function PedidoTab({
   teamState: TeamState | null;
   onSubmitted: () => void;
 }) {
-  const [cart, setCart] = useState<Record<string, number>>({});
+  const draftKey = `sp:v2:cart:${code}:${identity.teamId}:${round?.id ?? "none"}`;
+  const [cart, setCart] = useState<Record<string, number>>(() => {
+    const sent: Record<string, number> = {};
+    for (const order of teamState?.myOrders ?? []) sent[order.offer_id] = order.qty;
+    if (Object.keys(sent).length > 0) return sent;
+    if (typeof window === "undefined") return {};
+    try {
+      const raw = localStorage.getItem(draftKey);
+      return raw ? (JSON.parse(raw) as Record<string, number>) : {};
+    } catch {
+      return {};
+    }
+  });
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ tone: "success" | "error"; text: string } | null>(null);
-
-  // inicializar carrito desde los pedidos ya enviados
-  useEffect(() => {
-    if (teamState) {
-      const init: Record<string, number> = {};
-      for (const o of teamState.myOrders) init[o.offer_id] = o.qty;
-      setCart(init);
-    }
-  }, [teamState]);
 
   if (!round || round.status !== "open") {
     return (
@@ -423,7 +495,11 @@ function PedidoTab({
 
   function setQty(offerId: string, qty: number, pack: number, max: number) {
     const clamped = Math.max(0, Math.min(max, Math.round(qty / pack) * pack));
-    setCart((c) => ({ ...c, [offerId]: clamped }));
+    setCart((current) => {
+      const next = { ...current, [offerId]: clamped };
+      localStorage.setItem(draftKey, JSON.stringify(next));
+      return next;
+    });
   }
 
   async function submit() {
@@ -445,7 +521,7 @@ function PedidoTab({
         onSubmitted();
       }
     } catch {
-      setMsg({ tone: "error", text: "Error de red al enviar." });
+      setMsg({ tone: "error", text: "Sin señal: el borrador sigue guardado en este celular. Reconecta y vuelve a tocar Guardar pedido." });
     } finally {
       setSaving(false);
     }
@@ -453,6 +529,9 @@ function PedidoTab({
 
   return (
     <div className="space-y-4">
+      <Callout tone="info">
+        <b>Pregunta guía:</b> {ROUND_QUESTIONS[roundNo]}
+      </Callout>
       <div className="sticky top-16 z-10 flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
         <div>
           <div className="text-xs uppercase text-slate-400">Caja disponible</div>
@@ -529,6 +608,21 @@ function StepBtn({ children, onClick, disabled }: { children: React.ReactNode; o
       {children}
     </button>
   );
+}
+
+function useCountdown(closesAt: string | null): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!closesAt) return;
+    const id = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(id);
+  }, [closesAt]);
+  return closesAt ? Math.max(0, new Date(closesAt).getTime() - now) : 0;
+}
+
+function formatCountdown(ms: number): string {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
 
 // -------------------------------------------------------------------- Podio

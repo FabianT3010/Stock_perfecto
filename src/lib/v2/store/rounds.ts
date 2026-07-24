@@ -1,5 +1,6 @@
 // Store v2: ciclo de vida de la ronda (abrir / cerrar / revelar con el motor / editar).
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { db, verifyFacilitator } from "./context";
 import { ApiError } from "./http";
 import {
@@ -12,6 +13,7 @@ import {
   type EngineTeam,
 } from "@/lib/v2/engine";
 import type { SupplyConfig } from "@/lib/v2/types";
+import { PRODUCTS } from "@/lib/v2/constants";
 
 async function loadRound(sessionId: string, roundNumber: number) {
   const { data, error } = await db()
@@ -28,8 +30,6 @@ async function loadRound(sessionId: string, roundNumber: number) {
 export async function openRound(code: string, pin: string, roundNumber: number) {
   const session = await verifyFacilitator(code, pin);
   const round = await loadRound(session.id, roundNumber);
-  if (round.status === "revealed") throw new ApiError(409, "Esta ronda ya fue revelada.");
-  if (round.status === "open") return { ok: true };
 
   // precondición: demanda completa para todos los productos
   const [{ count: prodCount }, { count: demandCount }] = await Promise.all([
@@ -40,42 +40,34 @@ export async function openRound(code: string, pin: string, roundNumber: number) 
     throw new ApiError(409, "Falta configurar la demanda de todos los productos en esta ronda.");
   }
 
-  // copiar evento + config de abasto (secretos hasta ahora) a la ronda pública
-  const { data: plan } = await db()
-    .from("round_plans")
-    .select("event_headline, event_description, event_icon, supply_config")
-    .eq("round_id", round.id)
-    .maybeSingle();
-
-  const { error } = await db()
-    .from("rounds")
-    .update({
-      status: "open",
-      opened_at: new Date().toISOString(),
-      event_headline: plan?.event_headline ?? null,
-      event_description: plan?.event_description ?? null,
-      event_icon: plan?.event_icon ?? null,
-      supply_config: plan?.supply_config ?? null,
-    })
-    .eq("id", round.id);
-  if (error) throw new ApiError(500, error.message);
-
-  await db()
-    .from("sessions")
-    .update({ status: "running", current_round: roundNumber })
-    .eq("id", session.id);
+  const { error } = await db().rpc("open_game_round", {
+    p_session_id: session.id,
+    p_round_number: roundNumber,
+    p_duration_seconds: null,
+  });
+  if (error) throw new ApiError(409, error.message);
   return { ok: true };
 }
 
 export async function closeRound(code: string, pin: string, roundNumber: number) {
   const session = await verifyFacilitator(code, pin);
-  const round = await loadRound(session.id, roundNumber);
-  if (round.status !== "open") throw new ApiError(409, "Solo se puede cerrar una ronda abierta.");
-  const { error } = await db()
-    .from("rounds")
-    .update({ status: "closed", closed_at: new Date().toISOString() })
-    .eq("id", round.id);
-  if (error) throw new ApiError(500, error.message);
+  const { error } = await db().rpc("close_game_round", {
+    p_session_id: session.id,
+    p_round_number: roundNumber,
+  });
+  if (error) throw new ApiError(409, error.message);
+  return { ok: true };
+}
+
+export async function setRoundTime(code: string, pin: string, roundNumber: number, seconds: number) {
+  const session = await verifyFacilitator(code, pin);
+  const safeSeconds = Math.max(30, Math.min(7200, Math.round(Number(seconds))));
+  const { error } = await db().rpc("set_game_round_time", {
+    p_session_id: session.id,
+    p_round_number: roundNumber,
+    p_seconds: safeSeconds,
+  });
+  if (error) throw new ApiError(409, error.message);
   return { ok: true };
 }
 
@@ -85,16 +77,6 @@ export async function revealRound(code: string, pin: string, roundNumber: number
   if (round.status === "revealed") throw new ApiError(409, "Esta ronda ya fue revelada.");
   if (round.status !== "closed") throw new ApiError(409, "Cierra la ronda antes de revelar.");
 
-  // lock optimista: solo un reveal gana (idempotente ante doble clic)
-  const { data: locked, error: lockErr } = await db()
-    .from("rounds")
-    .update({ status: "revealed", revealed_at: new Date().toISOString() })
-    .eq("id", round.id)
-    .eq("status", "closed")
-    .select("id");
-  if (lockErr) throw new ApiError(500, lockErr.message);
-  if (!locked || locked.length === 0) throw new ApiError(409, "La ronda ya fue revelada.");
-
   // ---- cargar entradas del motor ----
   const [
     { data: products },
@@ -103,13 +85,19 @@ export async function revealRound(code: string, pin: string, roundNumber: number
     { data: lotsData },
     { data: ordersData },
     { data: demandData },
+    { data: submissions },
+    { data: suppliers },
+    { data: offers },
   ] = await Promise.all([
-    db().from("products").select("id, sale_price, shelf_life_rounds").eq("session_id", session.id),
+    db().from("products").select("id, sku, sale_price, shelf_life_rounds").eq("session_id", session.id),
     db().from("teams").select("id, cash, debt, score_total, service_sum, rounds_played").eq("session_id", session.id),
     db().from("kpi_snapshots").select("team_id, profit_cumulative").eq("session_id", session.id).eq("round_number", roundNumber - 1),
     db().from("inventory_lots").select("id, team_id, product_id, qty_remaining, unit_cost, expires_after_round, acquired_round").eq("session_id", session.id).gt("qty_remaining", 0),
     db().from("purchase_orders").select("id, team_id, product_id, qty, unit_cost, total_cost, placed_round, arrives_round").eq("session_id", session.id).eq("status", "pending"),
     db().from("demand_plan").select("product_id, planned_demand").eq("round_id", round.id),
+    db().from("order_submissions").select("team_id").eq("round_id", round.id),
+    db().from("suppliers").select("id, code").eq("session_id", session.id),
+    db().from("supplier_offers").select("id, supplier_id, product_id, unit_cost, lead_time_rounds").eq("session_id", session.id),
   ]);
 
   const engineProducts: EngineProduct[] = (products ?? []).map((p) => ({
@@ -146,6 +134,58 @@ export async function revealRound(code: string, pin: string, roundNumber: number
     placedRound: Number(o.placed_round),
     arrivesRound: Number(o.arrives_round),
   }));
+
+  type AutoOrder = EngineOrder & {
+    offerId: string;
+    supplierId: string;
+    leadTimeRounds: number;
+  };
+  const autoOrders: AutoOrder[] = [];
+  if (roundNumber === 1) {
+    const submitted = new Set((submissions ?? []).map((row) => row.team_id as string));
+    const luchoId = (suppliers ?? []).find((supplier) => supplier.code === "LUCHO")?.id as string | undefined;
+    const seedBySku = new Map(PRODUCTS.map((product) => [product.sku, product]));
+    const onHand = new Map<string, number>();
+    for (const lot of lotsData ?? []) {
+      const key = `${lot.team_id}:${lot.product_id}`;
+      onHand.set(key, (onHand.get(key) ?? 0) + Number(lot.qty_remaining));
+    }
+
+    for (const team of teams ?? []) {
+      const teamId = team.id as string;
+      if (submitted.has(teamId)) continue;
+      let budget = Number(team.cash);
+      for (const product of products ?? []) {
+        const seed = seedBySku.get(product.sku as string);
+        if (!seed || seed.activeFromRound > 1 || !luchoId) continue;
+        const offer = (offers ?? []).find(
+          (candidate) => candidate.supplier_id === luchoId && candidate.product_id === product.id,
+        );
+        if (!offer) continue;
+        const target = Math.ceil(seed.baseDemand * 0.6);
+        const available = onHand.get(`${teamId}:${product.id}`) ?? 0;
+        const qty = Math.min(40, Math.max(0, target - available));
+        const unitCost = Number(offer.unit_cost);
+        const totalCost = Math.round(qty * unitCost * 100) / 100;
+        if (qty <= 0 || totalCost > budget) continue;
+        budget -= totalCost;
+        autoOrders.push({
+          id: randomUUID(),
+          teamId,
+          productId: product.id as string,
+          qty,
+          unitCost,
+          totalCost,
+          placedRound: 1,
+          arrivesRound: 1,
+          offerId: offer.id as string,
+          supplierId: luchoId,
+          leadTimeRounds: Number(offer.lead_time_rounds),
+        });
+      }
+    }
+    engineOrders.push(...autoOrders);
+  }
   const demand = new Map((demandData ?? []).map((d) => [d.product_id as string, Number(d.planned_demand)]));
 
   const config: EngineConfig = {
@@ -166,120 +206,78 @@ export async function revealRound(code: string, pin: string, roundNumber: number
     demand,
   );
 
-  // ---- persistencia (orden importa) ----
-  // 1) lotes nuevos (llegadas)
-  let lotIdByOrderId = new Map<string, string>();
-  if (result.newLots.length) {
-    const { data: inserted, error } = await db()
-      .from("inventory_lots")
-      .insert(
-        result.newLots.map((n) => ({
-          session_id: session.id,
-          team_id: n.teamId,
-          product_id: n.productId,
-          acquired_round: n.acquiredRound,
-          qty_initial: n.qtyInitial,
-          qty_remaining: n.qtyRemaining,
-          unit_cost: n.unitCost,
-          source: "order",
-          order_id: n.orderId,
-          expires_after_round: n.expiresAfterRound,
-        })),
-      )
-      .select("id, order_id");
-    if (error) throw new ApiError(500, error.message);
-    lotIdByOrderId = new Map((inserted ?? []).map((r) => [r.order_id as string, r.id as string]));
-  }
+  // Persistencia atómica en PostgreSQL: o se publica TODO o no cambia nada.
   const orderIdByTempId = new Map(result.newLots.map((n) => [n.tempId, n.orderId]));
-  const resolveLot = (m: EngineMove): string | null => {
-    if (m.lotId) return m.lotId;
-    if (m.newLotTempId) return lotIdByOrderId.get(orderIdByTempId.get(m.newLotTempId) ?? "") ?? null;
-    return null;
-  };
-
-  // 2) parches de qty de lotes existentes
-  await Promise.all(
-    result.lotPatches.map((p) =>
-      db().from("inventory_lots").update({ qty_remaining: p.qtyRemaining }).eq("id", p.lotId),
-    ),
-  );
-
-  // 3) movimientos (ledger)
-  if (result.moves.length) {
-    await db().from("inventory_moves").insert(
-      result.moves.map((m) => ({
-        session_id: session.id,
-        team_id: m.teamId,
-        product_id: m.productId,
-        lot_id: resolveLot(m),
-        round_number: m.roundNumber,
-        type: m.type,
-        qty: m.qty,
-      })),
-    );
-  }
-
-  // 4) pedidos entregados
-  if (result.deliveredOrderIds.length) {
-    await db().from("purchase_orders").update({ status: "delivered" }).in("id", result.deliveredOrderIds);
-  }
-
-  // 5) snapshots de KPI
-  await db()
-    .from("kpi_snapshots")
-    .upsert(
-      result.kpis.map((k) => ({
-        session_id: session.id,
-        team_id: k.teamId,
-        round_id: round.id,
-        round_number: roundNumber,
-        revenue: k.revenue,
-        purchases_cash_out: k.purchasesCashOut,
-        purchases_refund: k.purchasesRefund,
-        cogs: k.cogs,
-        holding_cost: k.holdingCost,
-        fixed_cost: k.fixedCost,
-        spoilage_units: k.spoilageUnits,
-        spoilage_cost: k.spoilageCost,
-        demand_total: k.demandTotal,
-        units_sold: k.unitsSold,
-        lost_sales: k.lostSales,
-        service_level: k.serviceLevel,
-        avg_service_level: k.avgServiceLevel,
-        sell_through: k.sellThrough,
-        stock_end_units: k.stockEndUnits,
-        stock_end_value: k.stockEndValue,
-        cash_start: k.cashStart,
-        cash_end: k.cashEnd,
-        debt: k.debt,
-        profit_round: k.profitRound,
-        profit_cumulative: k.profitCumulative,
-        score_round: k.scoreRound,
-        score_total: k.scoreTotal,
-      })),
-      { onConflict: "team_id,round_id" },
-    );
-
-  // 6) actualizar equipos
-  await Promise.all(
-    result.kpis.map((k) =>
-      db()
-        .from("teams")
-        .update({
-          cash: k.cashEnd,
-          debt: k.debt,
-          score_total: k.scoreTotal,
-          service_sum: k.serviceSum,
-          rounds_played: k.roundsPlayed,
-        })
-        .eq("id", k.teamId),
-    ),
-  );
-
-  // 7) ¿fin del juego?
-  if (roundNumber >= session.total_rounds) {
-    await db().from("sessions").update({ status: "finished" }).eq("id", session.id);
-  }
+  const { error: applyError } = await db().rpc("apply_round_result", {
+    p_session_id: session.id,
+    p_round_id: round.id,
+    p_round_number: roundNumber,
+    p_auto_orders: autoOrders.map((order) => ({
+      id: order.id,
+      team_id: order.teamId,
+      offer_id: order.offerId,
+      supplier_id: order.supplierId,
+      product_id: order.productId,
+      qty: order.qty,
+      unit_cost: order.unitCost,
+      total_cost: order.totalCost,
+      lead_time_rounds: order.leadTimeRounds,
+      arrives_round: order.arrivesRound,
+    })),
+    p_new_lots: result.newLots.map((n) => ({
+      team_id: n.teamId,
+      product_id: n.productId,
+      acquired_round: n.acquiredRound,
+      qty_initial: n.qtyInitial,
+      qty_remaining: n.qtyRemaining,
+      unit_cost: n.unitCost,
+      order_id: n.orderId,
+      expires_after_round: n.expiresAfterRound,
+    })),
+    p_lot_patches: result.lotPatches.map((p) => ({
+      lot_id: p.lotId,
+      qty_remaining: p.qtyRemaining,
+    })),
+    p_moves: result.moves.map((m: EngineMove) => ({
+      team_id: m.teamId,
+      product_id: m.productId,
+      lot_id: m.lotId,
+      order_id: m.newLotTempId ? orderIdByTempId.get(m.newLotTempId) ?? null : null,
+      type: m.type,
+      qty: m.qty,
+    })),
+    p_delivered_order_ids: result.deliveredOrderIds,
+    p_kpis: result.kpis.map((k) => ({
+      team_id: k.teamId,
+      revenue: k.revenue,
+      purchases_cash_out: k.purchasesCashOut,
+      purchases_refund: k.purchasesRefund,
+      cogs: k.cogs,
+      holding_cost: k.holdingCost,
+      fixed_cost: k.fixedCost,
+      spoilage_units: k.spoilageUnits,
+      spoilage_cost: k.spoilageCost,
+      demand_total: k.demandTotal,
+      units_sold: k.unitsSold,
+      lost_sales: k.lostSales,
+      service_level: k.serviceLevel,
+      avg_service_level: k.avgServiceLevel,
+      sell_through: k.sellThrough,
+      stock_end_units: k.stockEndUnits,
+      stock_end_value: k.stockEndValue,
+      cash_start: k.cashStart,
+      cash_end: k.cashEnd,
+      debt: k.debt,
+      profit_round: k.profitRound,
+      profit_cumulative: k.profitCumulative,
+      score_round: k.scoreRound,
+      score_total: k.scoreTotal,
+      service_sum: k.serviceSum,
+      rounds_played: k.roundsPlayed,
+    })),
+    p_finish: roundNumber >= session.total_rounds,
+  });
+  if (applyError) throw new ApiError(409, applyError.message);
 
   return { ok: true, teams: result.kpis.length };
 }

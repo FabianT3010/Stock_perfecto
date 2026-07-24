@@ -1,5 +1,5 @@
 // Formateadores para la UI.
-import { CURRENCY } from "./constants";
+import { CURRENCY } from "./v2/constants";
 
 /** Formatea un monto como "Bs 250" (sin decimales si es entero). */
 export function money(n: number, currency = CURRENCY): string {

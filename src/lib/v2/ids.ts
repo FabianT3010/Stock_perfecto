@@ -12,6 +12,11 @@ export function generateRoomCode(length = 5): string {
   return out;
 }
 
+/** Código corto que reclama un equipo pre-creado; se imprime solo en su mesa. */
+export function generateTeamCode(length = 6): string {
+  return generateRoomCode(length);
+}
+
 /** PIN de facilitador de 6 dígitos (v2 endurece contra fuerza bruta). */
 export function generatePin(): string {
   return String(randomInt(100000, 1000000));

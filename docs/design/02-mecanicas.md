@@ -1,6 +1,10 @@
 # DISEÑO DE MECÁNICAS — "STOCK PERFECTO 2.0: LA TIENDA DE BARRIO"
 **Lente: game design de simulación seria | 5 rondas | ~20 equipos | dispositivo móvil por equipo | ~120 min**
 
+> **Documento histórico anterior a la síntesis.** Conserva alternativas y cifras
+> descartadas. La especificación vigente está en
+> [`PLAN-V2.md`](../../PLAN-V2.md).
+
 ---
 
 ## 0. PARÁMETROS BASE DE LA ECONOMÍA (constantes del juego)

@@ -115,14 +115,11 @@ export function useGameData(code: string): GameData {
       channel = supabase
         .channel(`game:${sid}:${Math.random().toString(36).slice(2)}`)
         .on("postgres_changes", { event: "*", schema: "public", table: "sessions", filter: `id=eq.${sid}` }, () => loadDynamic(sid))
-        .on("postgres_changes", { event: "*", schema: "public", table: "rounds", filter: `session_id=eq.${sid}` }, () => {
+        .on("postgres_changes", { event: "*", schema: "public", table: "rounds", filter: `session_id=eq.${sid}` }, (payload) => {
           loadDynamic(sid);
-          loadInventory(sid);
-        })
-        .on("postgres_changes", { event: "*", schema: "public", table: "teams", filter: `session_id=eq.${sid}` }, () => loadDynamic(sid))
-        .on("postgres_changes", { event: "*", schema: "public", table: "kpi_snapshots", filter: `session_id=eq.${sid}` }, () => {
-          loadDynamic(sid);
-          loadInventory(sid);
+          if ((payload.new as { status?: string } | null)?.status === "revealed") {
+            loadInventory(sid);
+          }
         })
         .subscribe((status) => {
           if (cancelled) return;

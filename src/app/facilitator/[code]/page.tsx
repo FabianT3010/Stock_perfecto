@@ -1,6 +1,13 @@
 "use client";
 
-import { use, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  use,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import Link from "next/link";
 import {
   Badge,
@@ -14,9 +21,13 @@ import {
   Stat,
   cx,
 } from "@/components/ui";
-import { readFacilitatorCreds, saveFacilitatorCreds, type FacilitatorCreds } from "@/lib/facilitator";
+import {
+  facilitatorStorageKey,
+  saveFacilitatorCreds,
+  type FacilitatorCreds,
+} from "@/lib/facilitator";
 import { rankTeams } from "@/lib/v2/derive";
-import { money, int, percent } from "@/lib/format";
+import { money, percent } from "@/lib/format";
 import type {
   KpiSnapshotRow,
   ProductRow,
@@ -39,12 +50,27 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 function Gate({ code }: { code: string }) {
-  const [creds, setCreds] = useState<FacilitatorCreds | null | "loading">("loading");
+  const stored = useSyncExternalStore(
+    (onChange) => {
+      window.addEventListener("storage", onChange);
+      return () => window.removeEventListener("storage", onChange);
+    },
+    () => window.localStorage.getItem(facilitatorStorageKey(code)),
+    () => null,
+  );
+  const storedCreds = useMemo(() => {
+    if (!stored) return null;
+    try {
+      return JSON.parse(stored) as FacilitatorCreds;
+    } catch {
+      return null;
+    }
+  }, [stored]);
+  const [verifiedCreds, setVerifiedCreds] = useState<FacilitatorCreds | null>(null);
+  const creds = verifiedCreds ?? storedCreds;
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
-
-  useEffect(() => setCreds(readFacilitatorCreds(code) ?? null), [code]);
 
   async function verify(e: React.FormEvent) {
     e.preventDefault();
@@ -61,7 +87,7 @@ function Gate({ code }: { code: string }) {
       else {
         const c = { code, pin };
         saveFacilitatorCreds(c);
-        setCreds(c);
+        setVerifiedCreds(c);
       }
     } catch {
       setError("Error de red.");
@@ -70,9 +96,6 @@ function Gate({ code }: { code: string }) {
     }
   }
 
-  if (creds === "loading") {
-    return <main className="flex min-h-[70vh] items-center justify-center"><Spinner className="h-6 w-6 text-slate-400" /></main>;
-  }
   if (!creds) {
     return (
       <main className="mx-auto flex min-h-[70vh] max-w-sm flex-col justify-center px-4">
@@ -134,21 +157,12 @@ function Control({ creds }: { creds: FacilitatorCreds }) {
   }, [code, pin]);
 
   useEffect(() => {
-    refresh();
+    queueMicrotask(refresh);
     const id = setInterval(refresh, 2500);
     return () => clearInterval(id);
   }, [refresh]);
 
-  useEffect(() => {
-    if (selected === null && state) {
-      const active = state.session.current_round > 0
-        ? state.session.current_round
-        : state.rounds.find((r) => r.status !== "revealed")?.round_number ?? 1;
-      setSelected(active);
-    }
-  }, [state, selected]);
-
-  async function action(path: string, roundNumber: number) {
+  const action = useCallback(async (path: string, roundNumber: number) => {
     setBusy(true); setError(null);
     try {
       const res = await fetch(path, {
@@ -160,7 +174,22 @@ function Control({ creds }: { creds: FacilitatorCreds }) {
       if (!res.ok) setError(json.error ?? "La acción falló.");
       await refresh();
     } catch { setError("Error de red."); } finally { setBusy(false); }
-  }
+  }, [code, pin, refresh]);
+
+  const openRound = state?.rounds.find((r) => r.status === "open") ?? null;
+  useEffect(() => {
+    if (!openRound?.closes_at) return;
+    let requested = false;
+    const tick = () => {
+      if (!requested && Date.now() >= new Date(openRound.closes_at!).getTime()) {
+        requested = true;
+        void action("/api/v2/rounds/close", openRound.round_number);
+      }
+    };
+    tick();
+    const id = setInterval(tick, 500);
+    return () => clearInterval(id);
+  }, [action, openRound?.closes_at, openRound?.round_number]);
 
   async function saveDemands(roundNumber: number, demands: { productId: string; planned: number }[]) {
     setBusy(true);
@@ -176,6 +205,25 @@ function Control({ creds }: { creds: FacilitatorCreds }) {
     } finally { setBusy(false); }
   }
 
+  async function saveRoundTime(roundNumber: number, seconds: number) {
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/v2/rounds/time", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, pin, roundNumber, seconds }),
+      });
+      const json = await response.json();
+      if (!response.ok) setError(json.error ?? "No se pudo cambiar el tiempo.");
+      await refresh();
+    } catch {
+      setError("Error de red.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function kick(teamId: string) {
     setBusy(true);
     try {
@@ -187,12 +235,35 @@ function Control({ creds }: { creds: FacilitatorCreds }) {
     } finally { setBusy(false); }
   }
 
+  async function toggleRegistration(open: boolean) {
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/v2/facilitator/registration", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, pin, open }),
+      });
+      const json = await response.json();
+      if (!response.ok) setError(json.error ?? "No se pudo cambiar la inscripción.");
+      await refresh();
+    } catch {
+      setError("Error de red.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!state) {
     return <main className="flex min-h-[70vh] items-center justify-center">{error ? <Callout tone="error">{error}</Callout> : <Spinner className="h-6 w-6 text-slate-400" />}</main>;
   }
 
   const { session, rounds, teams, products, demandPlan, snapshots, roundPlans, submittedTeamIds } = state;
-  const selectedRound = rounds.find((r) => r.round_number === selected) ?? rounds[0];
+  const defaultSelected = session.current_round > 0
+    ? session.current_round
+    : rounds.find((r) => r.status !== "revealed")?.round_number ?? 1;
+  const selectedNumber = selected ?? defaultSelected;
+  const selectedRound = rounds.find((r) => r.round_number === selectedNumber) ?? rounds[0];
   const ranking = rankTeams(teams, snapshots);
   const submitted = new Set(submittedTeamIds);
 
@@ -214,7 +285,7 @@ function Control({ creds }: { creds: FacilitatorCreds }) {
             <div className="font-mono text-2xl font-black tracking-widest text-brand-700">{code}</div>
           </div>
           <Link href={`/facilitator/${code}/carteles`} target="_blank">
-            <Button variant="secondary">Carteles</Button>
+            <Button variant="secondary">Recuperación</Button>
           </Link>
           <Link href={`/proyector/${code}`} target="_blank">
             <Button variant="secondary">Proyectar</Button>
@@ -223,6 +294,38 @@ function Control({ creds }: { creds: FacilitatorCreds }) {
       }
     >
       {error && <div className="mb-4"><Callout tone="error">{error}</Callout></div>}
+
+      {session.status === "lobby" && (
+        <div className="mb-5">
+          <Card
+            title="Inscripción de equipos"
+            aside={
+              <Badge tone={session.registration_open ? "open" : "closed"}>
+                {session.registration_open ? "Abierta" : "Cerrada"}
+              </Badge>
+            }
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-2xl font-black text-slate-900">
+                  {teams.length}/{session.max_teams}
+                </div>
+                <p className="text-sm text-slate-500">
+                  Comparte <b className="font-mono text-brand-700">{code}</b> o el enlace de ingreso.
+                  Al abrir R1 las inscripciones se cierran automáticamente.
+                </p>
+              </div>
+              <Button
+                variant={session.registration_open ? "danger" : "success"}
+                disabled={busy}
+                onClick={() => toggleRegistration(!session.registration_open)}
+              >
+                {session.registration_open ? "Cerrar inscripciones" : "Reabrir inscripciones"}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
 
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
@@ -234,7 +337,7 @@ function Control({ creds }: { creds: FacilitatorCreds }) {
                 onClick={() => setSelected(r.round_number)}
                 className={cx(
                   "rounded-md border px-3 py-2 text-sm font-semibold transition",
-                  r.round_number === selected ? "border-brand-400 bg-brand-50 text-brand-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
+                  r.round_number === selectedNumber ? "border-brand-400 bg-brand-50 text-brand-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
                 )}
               >
                 Sem {r.round_number}
@@ -253,13 +356,18 @@ function Control({ creds }: { creds: FacilitatorCreds }) {
               busy={busy}
               onAction={action}
               onSaveDemands={(d) => saveDemands(selectedRound.round_number, d)}
+              onSetTime={(seconds) => saveRoundTime(selectedRound.round_number, seconds)}
             />
           )}
 
           {/* semáforo de equipos */}
           <Card
-            title={`Equipos · pedidos de la semana ${session.current_round || "—"}`}
-            aside={<span className="text-sm font-semibold text-slate-500">{submitted.size} de {teams.length} enviaron</span>}
+            title={session.status === "lobby" ? "Equipos registrados" : `Equipos · pedidos de la semana ${session.current_round}`}
+            aside={
+              <span className="text-sm font-semibold text-slate-500">
+                {session.status === "lobby" ? `${teams.length}/${session.max_teams}` : `${submitted.size} de ${teams.length} enviaron`}
+              </span>
+            }
           >
             {teams.length === 0 ? (
               <p className="text-sm text-slate-400">Aún no hay equipos.</p>
@@ -275,7 +383,11 @@ function Control({ creds }: { creds: FacilitatorCreds }) {
                       </span>
                       <span className="flex items-center gap-2">
                         <span className="tabular text-xs text-slate-500">{money(Number(t.cash))}</span>
-                        <button onClick={() => kick(t.id)} className="text-xs text-slate-400 hover:text-danger-600" title="Expulsar">quitar</button>
+                        {session.status === "lobby" && (
+                          <button onClick={() => kick(t.id)} className="text-xs text-slate-400 hover:text-danger-600" title="Expulsar">
+                            quitar
+                          </button>
+                        )}
                       </span>
                     </li>
                   );
@@ -322,6 +434,7 @@ function RoundControl({
   busy,
   onAction,
   onSaveDemands,
+  onSetTime,
 }: {
   round: RoundRow;
   products: ProductRow[];
@@ -330,6 +443,7 @@ function RoundControl({
   busy: boolean;
   onAction: (path: string, roundNumber: number) => void;
   onSaveDemands: (d: { productId: string; planned: number }[]) => void;
+  onSetTime: (seconds: number) => void;
 }) {
   const editable = round.status !== "revealed";
   const seed = useMemo(() => {
@@ -341,7 +455,8 @@ function RoundControl({
     return m;
   }, [round.id, products, demandPlan]);
   const [demands, setDemands] = useState<Record<string, string>>(seed);
-  useEffect(() => setDemands(seed), [seed]);
+  const [timeMinutes, setTimeMinutes] = useState(() => String(round.duration_seconds / 60));
+  const remaining = useCountdown(round.status === "open" ? round.closes_at : null);
 
   const supply = plan?.supply_config;
 
@@ -351,6 +466,45 @@ function RoundControl({
       aside={<Badge tone={round.status}>{STATUS_LABEL[round.status]}</Badge>}
     >
       {plan?.facilitator_notes && <p className="mb-3 text-sm text-slate-500"><span className="font-semibold text-slate-600">Nota:</span> {plan.facilitator_notes}</p>}
+      {round.status === "open" && (
+        <div className="mb-4 flex items-center justify-between rounded-md border border-brand-200 bg-brand-50 px-3 py-2">
+          <span className="text-sm font-semibold text-brand-800">Cierre automático</span>
+          <span className="font-mono text-2xl font-black tabular-nums text-brand-800">
+            {formatCountdown(remaining)}
+          </span>
+        </div>
+      )}
+
+      {(round.status === "pending" || round.status === "open") && (
+        <div className="mb-4 flex flex-wrap items-end gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-3">
+          <Field
+            label={round.status === "open" ? "Reemplazar tiempo restante" : "Duración de esta semana"}
+            hint="Entre 0,5 y 120 minutos."
+          >
+            <Input
+              type="number"
+              min={0.5}
+              max={120}
+              step={0.5}
+              value={timeMinutes}
+              onChange={(event) => setTimeMinutes(event.target.value)}
+              className="w-28"
+            />
+          </Field>
+          <Button
+            variant="secondary"
+            disabled={busy || !Number.isFinite(Number(timeMinutes)) || Number(timeMinutes) < 0.5}
+            onClick={() => onSetTime(Math.round(Number(timeMinutes) * 60))}
+          >
+            Guardar tiempo
+          </Button>
+          {round.status === "open" && (
+            <span className="pb-2 text-xs text-slate-500">
+              El reloj comenzará desde este valor al guardar.
+            </span>
+          )}
+        </div>
+      )}
 
       {supply && (
         <div className="mb-4 flex flex-wrap gap-2 text-xs">
@@ -385,7 +539,7 @@ function RoundControl({
         )}
         <div className="ml-auto flex gap-2">
           {round.status === "pending" && <Button variant="success" disabled={busy} onClick={() => onAction("/api/v2/rounds/open", round.round_number)}>Abrir semana</Button>}
-          {round.status === "open" && <Button variant="danger" disabled={busy} onClick={() => onAction("/api/v2/rounds/close", round.round_number)}>Cerrar semana</Button>}
+          {round.status === "open" && <Button variant="danger" disabled={busy} onClick={() => onAction("/api/v2/rounds/close", round.round_number)}>Cerrar ahora</Button>}
           {round.status === "closed" && <Button disabled={busy} onClick={() => onAction("/api/v2/rounds/reveal", round.round_number)}>Revelar resultados</Button>}
           {round.status === "revealed" && <span className="text-sm font-semibold text-brand-700">Resultados publicados</span>}
         </div>
@@ -397,4 +551,19 @@ function RoundControl({
 function StatusDot({ status }: { status: RoundRow["status"] }) {
   const color = status === "open" ? "bg-brand-500" : status === "closed" ? "bg-accent-500" : status === "revealed" ? "bg-gold-600" : "bg-slate-300";
   return <span className={cx("inline-block h-2 w-2 rounded-full", color)} />;
+}
+
+function useCountdown(closesAt: string | null): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!closesAt) return;
+    const id = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(id);
+  }, [closesAt]);
+  return closesAt ? Math.max(0, new Date(closesAt).getTime() - now) : 0;
+}
+
+function formatCountdown(ms: number): string {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
