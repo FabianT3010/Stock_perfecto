@@ -1,6 +1,11 @@
 # ENTREGABLE — LENTE: DISEÑO PEDAGÓGICO Y NARRATIVA
 ## "Stock Perfecto v2: La Tiendita de Doña Peta"
 
+> **Documento histórico anterior a la síntesis.** Conserva alternativas y cifras
+> descartadas. La especificación vigente está en
+> [`PLAN-V2.md`](../../PLAN-V2.md) y la guía operativa en
+> [`GUIA-FACILITADOR.md`](../GUIA-FACILITADOR.md).
+
 ---
 
 ## 0. SUPUESTOS DECLARADOS (ajustables, coordinables con el lente de datos/mecánica)

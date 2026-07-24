@@ -10,13 +10,13 @@ export default function Home() {
           Actividad de laboratorio
         </span>
         <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
-          Gestión de inventario bajo incertidumbre
+          La Tiendita de Doña Peta
         </h1>
         <p className="mt-4 text-base leading-relaxed text-slate-600">
-          Cada participante administra un punto de venta y decide cuántas unidades
-          preparar antes de conocer la demanda real. El objetivo es equilibrar
-          ganancia, inventario sobrante y ventas perdidas a lo largo de varias
-          rondas de decisión.
+          Cada equipo administra una tienda de barrio durante 5 semanas: deciden
+          qué comprar, cuánto y a qué proveedor, antes de conocer la demanda real.
+          El inventario, la caja y el servicio viajan de una semana a la otra. Gana
+          quien construye el mayor Valor de la Tienda.
         </p>
       </div>
 
@@ -25,16 +25,16 @@ export default function Home() {
           href="/join"
           icon={<IconUser className="h-5 w-5" />}
           iconClass="bg-brand-50 text-brand-700"
-          title="Participante"
-          description="Ingresa con el código de tu sala y registra tus decisiones ronda por ronda."
-          cta="Ingresar a una sala"
+          title="Equipo"
+          description="Ingresa con el código de tu mesa, administra tu tienda y toma las decisiones de compra de cada semana."
+          cta="Entrar con mi equipo"
         />
         <RoleCard
           href="/facilitator"
           icon={<IconControls className="h-5 w-5" />}
           iconClass="bg-accent-50 text-accent-700"
           title="Facilitador"
-          description="Crea la sala, controla las rondas, revela la demanda y proyecta los resultados."
+          description="Crea la sala, controla las semanas, revela la demanda y proyecta el ranking."
           cta="Crear una sala"
         />
       </div>

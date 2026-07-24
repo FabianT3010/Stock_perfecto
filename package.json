@@ -2,17 +2,24 @@
   "name": "stock-perfecto",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev -p 3100",
     "build": "next build",
     "start": "next start -p 3100",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "calibrate": "node tools/calibrate.mjs",
+    "smoke": "node tools/smoke.mjs",
+    "check": "npm run lint && npm test && npm run calibrate && npm run build"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.8",
     "next": "16.2.11",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "recharts": "^3.10.0",
     "server-only": "^0.0.1"
   },
   "devDependencies": {
@@ -23,6 +30,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.11",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.10"
   }
 }

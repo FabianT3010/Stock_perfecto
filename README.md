@@ -1,167 +1,167 @@
-# Stock Perfecto 
-Simulación competitiva **por rondas** del problema del *newsvendor* (vendedor de
-periódicos): cada participante administra un kiosco y decide **cuántas unidades
-preparar** antes de conocer la demanda real, buscando equilibrar ganancia,
-sobrantes y ventas perdidas.
+# Stock Perfecto — La Tiendita de Doña Peta
 
-App web en **tiempo real**: los estudiantes se unen desde cualquier navegador con
-un código de sala, el facilitador controla las rondas desde un panel y el ranking
-se actualiza solo.
+Simulación competitiva de inventarios para talleres presenciales. Cada equipo
+administra una tienda durante cinco semanas: analiza datos, compra a proveedores
+con distintos tiempos de entrega y enfrenta demanda, quiebres, merma y costos de
+almacenaje.
 
----
+La aplicación está pensada para unas 20 mesas trabajando desde celulares, con un
+panel privado para el facilitador y una vista de proyección para el aula.
 
-## Características
+## Qué incluye
 
-- **Sin cuentas ni contraseñas.** El facilitador crea una sala → obtiene un
-  **código** y un **PIN**. Los estudiantes entran con el código y su nombre.
-- **Tiempo real** (Supabase Realtime): decisiones, revelación de demanda y ranking
-  se propagan al instante a todas las pantallas.
-- **5 rondas con dificultad creciente de información** (configurable):
-  1. Intuición · 2. Resultado previo · 3. Demanda histórica · 4. Indicadores · 5. Final.
-- **Privacidad garantizada:** la demanda real y las decisiones de los demás viven
-  en tablas que el navegador del estudiante **no puede leer**. Solo se publican los
-  resultados al revelar la ronda.
-- **Indicadores por ronda:** ganancia, acumulada, sobrantes, ventas perdidas,
-  nivel de servicio y eficiencia de inventario.
-- **Ranking con desempates**: mayor ganancia acumulada → menos ventas perdidas →
-  menor sobrante → mejor nivel de servicio.
+- Registro autónomo y controlado: cada mesa crea un equipo mientras el lobby está
+  abierto y recibe un código privado de recuperación.
+- Cinco rondas encadenadas; no se puede saltar ni abrir dos a la vez.
+- Reloj compartido con seis minutos predeterminados y autocierre. El facilitador
+  puede configurar la duración general y editar cada semana antes o durante la ronda.
+- Pedidos de compra con caja, múltiplos de caja, topes y lead time validados en
+  el servidor.
+- Compra de cero unidades registrada como una decisión válida.
+- Piloto conservador en la ronda 1 si una mesa no logra enviar.
+- Inventario por lotes FEFO, vencimiento, entrega parcial, reembolso, costo fijo
+  y almacenaje.
+- Cálculo y revelado atómicos: un fallo no deja una ronda publicada a medias y
+  un doble clic no la procesa dos veces.
+- Borrador del carrito guardado por equipo y ronda en el dispositivo.
+- Actualización en tiempo real con sondeo de respaldo y recarga al volver a la
+  pestaña.
+- Onboarding breve dentro de la app y materiales imprimibles para operar sin
+  improvisación.
 
 ## Stack
 
-- [Next.js 16](https://nextjs.org/) (App Router, TypeScript) + React 19
-- [Tailwind CSS v4](https://tailwindcss.com/)
-- [Supabase](https://supabase.com/) (PostgreSQL + Realtime)
-- Despliegue en [Vercel](https://vercel.com/)
+- Next.js 16.2 (App Router), React 19 y TypeScript
+- Tailwind CSS 4 y Recharts
+- Supabase: PostgreSQL, RLS y Realtime
+- Vitest para el motor económico
 
-## Estructura
+## Puesta en marcha local
 
-```
-src/
-  app/
-    page.tsx                 Inicio (elegir rol)
-    join/                    Unirse a una sala (participante)
-    play/[code]/             Pantalla de juego del participante
-    facilitator/             Crear sala
-    facilitator/[code]/      Panel de control (protegido por PIN)
-    api/                     Route handlers (escrituras con service role)
-      sessions/ join/ decisions/ facilitator/state/
-      rounds/{open,close,reveal,update}/
-  lib/
-    game.ts                  Lógica pura (fórmulas, ranking)
-    constants.ts             Parámetros y plantillas de las 5 rondas
-    derive.ts                Derivaciones para la UI (ranking, historial)
-    useSessionData.ts        Hook de datos públicos + suscripción Realtime
-    server/store.ts          Acceso a datos con service role (todas las escrituras)
-    supabase/{browser,admin}.ts  Clientes Supabase
-  components/                UI (ui.tsx) y componentes del juego (game.tsx)
-supabase/
-  schema.sql                 Esquema completo (tablas, RLS, grants, Realtime)
-  migrations/                Misma definición como migración para el CLI de Supabase
-```
+Requisitos: Node.js 20.9 o superior y Docker Desktop.
 
-## Puertos fijos
+En Windows, ejecuta `run.bat`. El script instala dependencias si hace falta,
+inicia Supabase, levanta la aplicación y abre el navegador.
 
-El proyecto usa siempre los mismos puertos. Están elegidos por debajo de 49152
-para que Windows (Hyper-V/WSL) no pueda reservarlos y romper el arranque.
-
-| Servicio             | Puerto | URL                      |
-| -------------------- | ------ | ------------------------ |
-| Aplicación           | 3100   | http://localhost:3100    |
-| Supabase API         | 44321  | http://127.0.0.1:44321   |
-| Supabase Base datos  | 44322  | `postgresql://…:44322`   |
-| Supabase Studio      | 44323  | http://localhost:44323   |
-
-Se definen en `package.json` (app) y en `supabase/config.toml` (Supabase).
-
-## Puesta en marcha (local)
-
-Requisitos: **Node 20.9+** y **Docker Desktop** abierto.
-
-### Windows: un solo archivo
-
-Ejecuta **`run.bat`**. Hace todo:
-
-1. Verifica que Docker esté corriendo.
-2. Instala dependencias si faltan.
-3. Crea `.env.local` con la configuración local si no existe.
-4. Levanta la base de datos (Supabase) y la aplicación.
-5. Abre el navegador en http://localhost:3100.
-
-Para **detener todo** (aplicación y base de datos), vuelve a esa misma ventana y
-presiona cualquier tecla. No hay más scripts: `run.bat` levanta y baja.
-
-### Otros sistemas (o manual)
+De forma manual:
 
 ```bash
 npm install
-npx supabase start     # base de datos + Realtime, aplica supabase/migrations/
-npm run dev            # aplicación en http://localhost:3100
+npx supabase start
+npm run dev
 ```
 
-Para detener: `Ctrl+C` en la aplicación y `npx supabase stop`.
+Servicios locales:
 
-### Usar Supabase en la nube
+| Servicio | Puerto | Dirección |
+|---|---:|---|
+| Aplicación | 3100 | http://localhost:3100 |
+| Supabase API | 44321 | http://127.0.0.1:44321 |
+| PostgreSQL | 44322 | `postgresql://…:44322` |
+| Supabase Studio | 44323 | http://localhost:44323 |
 
-Sigue [`DEPLOY.md`](./DEPLOY.md): crea el proyecto, ejecuta `supabase/schema.sql`
-y pon esas llaves en `.env.local` (ver [`.env.local.example`](./.env.local.example)).
+Para producción, consulta [DEPLOY.md](./DEPLOY.md). Para ejecutar la aplicación
+en contenedor, consulta [DOCKER.md](./DOCKER.md).
 
-### Con Docker
+## Flujo del taller
 
-La app también corre containerizada (imagen *standalone* + `docker compose`).
-Ver [`DOCKER.md`](./DOCKER.md):
+1. El facilitador crea una sala, define el cupo y comparte el enlace o código.
+2. Un representante por mesa entra en `/join`, elige nombre e integrantes y
+   guarda el código privado de recuperación que recibe.
+3. El facilitador revisa la lista y cierra las inscripciones; abrir R1 también las
+   cierra automáticamente.
+4. En cada semana, el facilitador revisa la duración y abre la ronda. Los equipos
+   pueden enviar o corregir su pedido mientras el reloj siga abierto.
+5. Al vencer el reloj, el panel cierra la ronda. El facilitador revela los
+   resultados y conduce el debrief antes de abrir la siguiente.
 
-```bash
-cp .env.docker.example .env      # completa las llaves
-docker compose up --build
+La pantalla **Recuperación** contiene las credenciales privadas de los equipos ya
+registrados y solo se abre desde un navegador que conserve el PIN.
+
+## Modelo económico
+
+La tienda comienza con Bs 800. Cada semana se cobran Bs 60 de costo fijo y
+Bs 0,20 por cada unidad que queda almacenada. El motor entrega los pedidos,
+consume inventario por FEFO, descuenta vencimientos y registra ventas perdidas.
+
+El ranking usa:
+
+```text
+Valor de la Tienda =
+  caja
+  + 50 % del inventario vigente valorado al costo
+  + Bs 5 × nivel de servicio promedio (en puntos porcentuales)
+  − deuda
 ```
 
-## Cómo se juega
+Los parámetros canónicos están en `src/lib/v2/constants.ts`; el motor puro está
+en `src/lib/v2/engine.ts`.
 
-1. **Facilitador:** entra a `/facilitator`, crea la sala y anota el **código** y el
-   **PIN**. Comparte el código (o el enlace `/join?code=XXXX`) con los estudiantes.
-2. **Participantes:** entran a `/join`, ponen el código y su nombre.
-3. **Facilitador** (en `/facilitator/CÓDIGO`): por cada ronda →
-   **Abrir** ▸ los estudiantes envían su cantidad ▸ **Cerrar** ▸
-   **Revelar demanda y resultados**. Avanza a la siguiente ronda.
-4. Tras la última ronda se corona al ganador por **ganancia acumulada**.
+## Seguridad y consistencia
 
-## Fórmulas (por ronda)
+- El navegador solo puede leer las tablas públicas necesarias para mostrar el
+  juego.
+- PIN, tokens, códigos privados, planes de demanda, pedidos y envíos viven en
+  tablas sin acceso para `anon` ni `authenticated`.
+- Las escrituras pasan por Route Handlers y usan la clave `service_role` solo en
+  el servidor.
+- Los reemplazos de pedidos y el revelado se ejecutan mediante funciones SQL
+  transaccionales.
+- El contador de mesas enviadas proviene de `order_submissions`, por lo que un
+  pedido vacío también cuenta.
 
+## Estructura relevante
+
+```text
+src/
+  app/
+    facilitator/              creación y control de sala
+    join/                     registro y recuperación de equipos
+    play/[code]/              aplicación del equipo
+    proyector/[code]/         pantalla pública del aula
+    api/v2/                   API vigente
+  lib/v2/
+    constants.ts              economía y guion canónicos
+    engine.ts                 cálculo puro de una ronda
+    store/                    validación y persistencia del servidor
+    useGameData.ts            Realtime y sondeo de respaldo
+supabase/
+  schema.sql                  instalación nueva en Supabase
+  migrations/                esquema versionado para Supabase CLI
+tools/
+  calibrate.mjs              simulación reproducible de estrategias
+  smoke.mjs                  recorrido HTTP de punta a punta
+docs/
+  GUIA-FACILITADOR.md
+  MATERIALES-IMPRIMIBLES.md
 ```
-vendidas   = min(preparadas, demanda_real)
-sobrantes  = preparadas − vendidas
-perdidas   = demanda_real − vendidas
-ingreso    = vendidas   × precio
-recuperado = sobrantes  × valor_recuperación
-costo      = preparadas × costo_unitario
-ganancia   = ingreso + recuperado − costo
-nivel_servicio        = vendidas / demanda_real
-eficiencia_inventario = vendidas / preparadas
-```
 
-## Modelo de privacidad
-
-- **Tablas públicas** (lectura anónima + Realtime): `sessions`, `rounds`,
-  `participants`, `results`. La demanda real de una ronda es `NULL` hasta revelarla.
-- **Tablas secretas** (solo el servidor con *service role*): `round_secrets`
-  (demanda planificada), `decisions` (cantidades enviadas), `participant_secrets`
-  (tokens), `session_secrets` (PIN).
-- **Todas las escrituras** pasan por los *route handlers* del servidor. El
-  navegador solo lee datos públicos y se suscribe a cambios.
+La API anterior a v2 fue retirada para evitar mantener dos implementaciones
+incompatibles.
 
 ## Verificación
 
-- Lógica del juego validada con los casos del enunciado (ganancia Bs 250,
-  nivel de servicio 86 %).
-- Prueba end-to-end del flujo completo (crear → unirse → abrir → enviar → cerrar →
-  revelar → ranking), incluyendo controles de privacidad, autenticación y entrega
-  de eventos por Realtime.
+```bash
+npm run lint
+npm test
+npm run calibrate
+npm run build
+```
 
-## Scripts
+Con Supabase local y `npm run dev` activos:
 
 ```bash
-npm run dev      # desarrollo
-npm run build    # build de producción
-npm run start    # servir el build
-npm run lint     # eslint
+npm run smoke
 ```
+
+`npm run check` ejecuta lint, pruebas unitarias, calibración y build. La prueba de
+humo crea datos locales y comprueba credenciales privadas, pedido cero, piloto
+R1, revelado único y orden estricto de rondas.
+
+## Documentación
+
+- [Plan canónico v2](./PLAN-V2.md)
+- [Guía del facilitador](./docs/GUIA-FACILITADOR.md)
+- [Materiales imprimibles](./docs/MATERIALES-IMPRIMIBLES.md)
+- [Despliegue](./DEPLOY.md)
+- [Docker](./DOCKER.md)

@@ -1,6 +1,10 @@
 # ENTREGABLE — LENTE UX: PANTALLAS, DASHBOARDS Y CONSTRUCTOR DE GRÁFICOS
 ## "Stock Perfecto v2 — La Tienda de Barrio" (UPSA, taller 2h, 20 equipos, mobile-first)
 
+> **Documento histórico anterior a la síntesis.** Incluye pantallas propuestas
+> que no pertenecen al MVP. El alcance vigente está en
+> [`PLAN-V2.md`](../../PLAN-V2.md).
+
 ---
 
 ## 0. SUPUESTOS DECLARADOS (ajustables por los otros lentes)

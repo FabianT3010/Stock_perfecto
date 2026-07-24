@@ -1,5 +1,9 @@
 # ECONOMÍA DEL JUEGO Y DATASETS — "Stock Perfecto v2: La Tienda del Barrio"
 
+> **Documento histórico anterior a la síntesis.** El catálogo de 13 productos y
+> su simulación fueron descartados. Los parámetros vigentes están en
+> [`PLAN-V2.md`](../../PLAN-V2.md) y se validan con `npm run calibrate`.
+
 **Supuestos declarados:** ronda = 1 semana de la tienda; taller de ~2 h con 20 equipos; todas las cifras en bolivianos (Bs), precios de calle Santa Cruz 2026 (post-inflación 2024-2025, redondeados para jugabilidad); la realización de demanda es **idéntica para los 20 equipos** en cada ronda (competencia justa: gana quien planifica mejor, no quien tuvo suerte); las compras se deciden al inicio de la ronda y la venta ocurre dentro de la misma ronda.
 
 ---

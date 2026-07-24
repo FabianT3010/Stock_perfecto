@@ -1,89 +1,106 @@
-# Guía de despliegue — Supabase + Vercel
+# Despliegue — Supabase + Vercel
 
-Todo lo necesario para dejar **Stock Perfecto** en línea, con capa gratuita, listo
-para ~45 estudiantes en dos laboratorios. Tiempo estimado: ~15 minutos.
+Esta guía instala Stock Perfecto v2 desde cero. Antes del evento, haz un ensayo
+completo con la misma red y los mismos dispositivos que se usarán en el aula.
 
----
+## 1. Crear Supabase
 
-## 1. Crear el proyecto Supabase
+1. Crea un proyecto en [Supabase](https://supabase.com/) y elige una región
+   cercana al aula.
+2. Abre **SQL Editor → New query**.
+3. Ejecuta todo `supabase/schema.sql`.
+4. Confirma en **Database → Publications** que `supabase_realtime` incluye
+   `sessions`, `rounds`, `teams` y `kpi_snapshots`.
 
-1. Entra a <https://supabase.com> → **New project**.
-2. Elige nombre, contraseña de base de datos y **región cercana** (para menor
-   latencia en el evento). Plan **Free**.
-3. Espera a que termine de aprovisionar (~2 min).
+`schema.sql` sirve para una instalación nueva de v2. No se debe presentar como
+una migración universal desde versiones anteriores. Para cambiar una base que ya
+contiene datos, crea y prueba una migración incremental antes de producción.
 
-## 2. Cargar el esquema
+## 2. Configurar las variables
 
-1. En el proyecto, abre **SQL Editor** → **New query**.
-2. Copia y pega **todo** el contenido de [`supabase/schema.sql`](./supabase/schema.sql).
-3. Ejecuta (**Run**). Debe terminar sin errores.
-   - Verás algún `NOTICE ... skipping` de los `drop policy if exists`: es normal.
-   - Esto crea las tablas, RLS, *grants* y activa **Realtime** en las tablas
-     públicas.
+En **Project Settings → API** toma estos valores:
 
-> El esquema es idempotente: puedes volver a ejecutarlo sin romper nada.
+| Variable | Valor | Exposición |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Project URL | pública |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | clave `anon`/publishable | pública |
+| `SUPABASE_SERVICE_ROLE_KEY` | clave `service_role`/secret | solo servidor |
 
-## 3. Copiar las llaves de API
+La clave `service_role` nunca debe llevar el prefijo `NEXT_PUBLIC_`, llegar al
+navegador ni guardarse en Git.
 
-En **Project Settings → API** copia:
+Para desarrollo local, copia `.env.local.example` a `.env.local` y completa los
+valores. Para Vercel, agrega las tres variables en la configuración del proyecto.
 
-| Valor                     | Variable de entorno              | ¿Secreta? |
-| ------------------------- | -------------------------------- | --------- |
-| Project URL               | `NEXT_PUBLIC_SUPABASE_URL`       | No        |
-| `anon` `public` API key   | `NEXT_PUBLIC_SUPABASE_ANON_KEY`  | No        |
-| `service_role` `secret`   | `SUPABASE_SERVICE_ROLE_KEY`      | **Sí** |
-
-> La `service_role` es **secreta**: nunca la pongas en variables `NEXT_PUBLIC_` ni
-> la subas al repositorio. Solo se usa en el servidor.
-
-## 4. Subir el código a GitHub
+## 3. Validar antes de publicar
 
 ```bash
-git add .
-git commit -m "Stock Perfecto"
-git branch -M main
-git remote add origin https://github.com/<tu-usuario>/<repo>.git
-git push -u origin main
+npm ci
+npm run check
 ```
 
-## 5. Desplegar en Vercel
+El comando valida lint, las pruebas del motor, la calibración y el build de
+producción.
 
-1. Entra a <https://vercel.com> → **Add New… → Project** → importa tu repo.
-2. Framework: **Next.js** (autodetectado). No cambies el build.
-3. En **Environment Variables**, agrega las tres del paso 3:
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `SUPABASE_SERVICE_ROLE_KEY`
-4. **Deploy**. En ~1–2 min tendrás una URL pública (ej. `https://tu-app.vercel.app`).
+Para validar también la integración local:
 
-## 6. Probar
+```bash
+npx supabase start
+npm run dev
+# en otra terminal
+npm run smoke
+```
 
-1. Abre la URL → **Soy facilitador** → crea una sala. Anota el **código** y el **PIN**.
-2. En otra pestaña (o teléfono) → **Soy participante** → entra con el código.
-3. Desde el panel del facilitador: **Abrir** ronda 1 → envía una decisión como
-   participante → **Cerrar** → **Revelar**. Verifica que el resultado y el ranking
-   aparecen al instante.
+La prueba de humo modifica únicamente la base a la que apuntan las variables
+locales; no la ejecutes contra producción.
 
----
+## 4. Desplegar en Vercel
 
-## El día del evento
+1. Sube el repositorio a un origen Git.
+2. En Vercel selecciona **Add New → Project** e importa el repositorio.
+3. Mantén el framework Next.js y los comandos detectados.
+4. Agrega las tres variables del apartado 2 a los ambientes correspondientes.
+5. Despliega.
 
-- Comparte **la URL + el código de sala** (o el enlace `…/join?code=CÓDIGO`).
-  Un código QR al enlace facilita el ingreso.
-- Antes de empezar, en el panel revisa/edita la **demanda real de cada ronda**
-  (columna secreta) y la **demanda histórica** de las rondas 3 y 4.
-- Ranking por laboratorio: crea **una sala por laboratorio** y consolida al final,
-  o usa **una sola sala** para un ranking global (Supabase Free aguanta 45+ usuarios
-  concurrentes sin problema).
+## 5. Prueba posterior al despliegue
 
-## Solución de problemas
+1. Crea una sala de dos equipos.
+2. Desde otro navegador registra dos equipos con nombres distintos.
+3. Verifica que cada alta entregue un código privado de recuperación y que un
+   nombre duplicado sea rechazado.
+4. Cierra las inscripciones, comprueba que no se pueda crear otro equipo y
+   vuelve a abrirlas antes de iniciar.
+5. Configura R1 con una duración distinta, ábrela y vuelve a cambiar el tiempo
+   restante mientras está activa.
+6. Envía una compra de cero y verifica que el panel muestre `1/2`.
+7. Cierra, revela y comprueba que el equipo vea caja, inventario y resultado.
+8. Intenta revelar otra vez: la ronda debe permanecer sin duplicados.
 
-- **"Faltan NEXT_PUBLIC_SUPABASE_URL…"**: falta una variable de entorno en Vercel;
-  agrégala y vuelve a desplegar (*Redeploy*).
-- **El ranking no se actualiza solo**: confirma que el paso 2 corrió completo
-  (activa Realtime). En Supabase → **Database → Publications → `supabase_realtime`**
-  deben figurar `sessions`, `rounds`, `participants`, `results`.
-- **"permission denied for table …"**: no se aplicaron los *grants*; vuelve a
-  ejecutar `supabase/schema.sql` completo.
-- **Cambiar el esquema después**: edita `supabase/schema.sql`, y vuelve a
-  ejecutarlo en el SQL Editor (es idempotente).
+## Preparación del evento
+
+- Crea la sala, define el cupo y proyecta la URL con el código.
+- Cada mesa registra un equipo y guarda su código privado de recuperación.
+- Revisa nombres, elimina registros impropios y cierra las inscripciones antes
+  del briefing. Abrir R1 también las bloquea.
+- Abre `/proyector/CODIGO` en la pantalla del aula.
+- Conserva el navegador del facilitador abierto: el autocierre lo dispara esa
+  pestaña cuando el reloj llega a cero; no existe un cron externo.
+- Despierta el proyecto Supabase el día anterior si el plan puede pausarlo por
+  inactividad.
+- Lleva hotspot, regleta y copias de
+  `docs/MATERIALES-IMPRIMIBLES.md` como respaldo.
+
+## Diagnóstico
+
+- **Faltan variables Supabase:** revisa los tres nombres exactos y vuelve a
+  desplegar.
+- **El facilitador pierde acceso:** vuelve a introducir el código y el PIN. El
+  PIN no puede recuperarse desde las vistas públicas.
+- **El ranking no se refresca:** comprueba la publicación Realtime y la conexión
+  del navegador; el cliente también sondea y recarga al recuperar visibilidad.
+- **Permission denied:** el esquema o sus grants no se aplicaron completos.
+- **Un equipo no pudo enviar R1:** al revelar, el servidor genera una compra
+  conservadora a Don Lucho. En R2–R5, no enviar equivale a pedido cero y se vende
+  solo el inventario disponible.
+- **Cambio de esquema con datos existentes:** usa una migración incremental y un
+  respaldo; no vuelvas a pegar `schema.sql` a ciegas.
